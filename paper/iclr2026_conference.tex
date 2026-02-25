@@ -1,0 +1,252 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2026_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage[table]{xcolor}
+\usepackage{wrapfig}
+\usepackage{fontawesome5}
+\usepackage{xcolor}
+\usepackage{xspace}
+\newcommand{\todo}[1]{\textbf{\textcolor{red}{#1}}\xspace}
+
+\title{From Pixels to Patches: \faSwimmer~Pooling\\Strategies for
+Earth Embeddings\thanks{No swimming required.}}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\iclrfinalcopy
+
+\author{
+  Isaac Corley$^\lambda$, Caleb Robinson$^\gamma$, Inbal Becker-Reshef$^\gamma$, Juan M. Lavista Ferres$^\gamma$\\
+  $^\lambda$Wherobots, $^\gamma$Microsoft AI for Good Research Lab\\
+  \\
+}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+\newcommand{\cellperf}[2]{\cellcolor{gray!\number\numexpr#1*3/4\relax}{#2}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+As geospatial foundation models shift from patch-level to pixel-level embeddings, practitioners must aggregate thousands of pixel vectors into patch representations that preserve class-discriminative signal while matching downstream label resolution. The default choice, mean pooling, discards within-patch variability and can drop accuracy by more than 10\% under spatial shift. To evaluate this effect, we introduce \emph{EuroSAT-Embed}: 81,000 embedding GeoTIFFs derived from three foundation models: AlphaEarth, OlmoEarth, and Tessera. We benchmark 11 training-free and 2 parametric pooling methods under both random and geographically disjoint test splits. Our results show that richer pooling schemes reduce the geographic generalization gap by up to 40\% relative to mean pooling and increases accuracy by up to 5\% on spatial splits. We recommend Generalized Mean Pooling (GeM) as a drop-in replacement for mean pooling: it improves accuracy without increasing embedding dimensionality. For maximum accuracy, Stats pooling (concatenation of min/max/mean/std pooling) performs best at 4$\times$ the embedding size. We further find that pooling effectiveness varies across embedding sources and that higher-dimensional embeddings benefit most from distributional statistics.
+\end{abstract}
+
+\section{Introduction}
+
+\begin{wrapfigure}{r}{0.42\linewidth}
+  \vspace{-12pt}
+  \centering
+  \includegraphics[width=\linewidth]{figures/hero.pdf}
+  \caption{\textbf{Pixel-to-patch pooling.} The input-label resolution mismatch requires aggregating dense pixel embeddings (shown as PCA pseudo-RGB) to a lower resolution for downstream tasks.}\label{fig:hero}
+  \vspace{-10pt}
+\end{wrapfigure}
+
+Geospatial foundation models (GFMs) turn satellite data time-series into embedding data products which can be reused across tasks and regions~\cite{fang2026earthembeddingsproductstaxonomy}.
+Recent GFMs create dense satellite imagery embeddings, i.e. at a \emph{pixel} resolution, but many downstream tasks operate on objects or regions (fields, parcels, buildings, solar farms, gridded patches), requiring aggregation of pixel embeddings over polygons.
+Pooling (i.e. aggregation) is therefore an inherent step in using GFM output in these tasks, however naive methods may erase relevant signals in the embeddings.
+
+This problem compounds when labels exist at a coarser-than-pixel resolution, known as the \textit{input-label resolution mismatch}~\citep{workman2023handling}.
+For example, EuroSAT~\citep{helber2019eurosat} contains 64$\times$64 patches of 10\,m pixels corresponding to a single land-cover label, which can be viewed as a \textit{zonal-statistics} aggregation operation~\citep{cressie2015statistics}.
+Unlike raw spectral bands, pixel embeddings encode semantic features that vary within a land-cover patch.
+This heterogeneity suggests that averaging can remove class signal that richer statistics keep.
+This makes pooling a design decision for geospatial applications with coarse labels and/or temporal dimensions.
+
+Pooling is underexplored for earth embeddings\footnote{A relevant exception is the recent OlmoEarth paper~\cite{herzog2025olmoearth} that reports searching over mean and max temporal pooling strategies as a hyperparameter in downstream tasks.}, though it is heavily studied in related domains.
+In image retrieval, choices like generalized mean (GeM) pooling~\citep{radenovic2018gem} often matter as much as the learned encoder.
+In audio and video processing, statistical pooling (concatenating means and standard deviations) effectively summarizes variable-length sequences~\citep{miech2017learnable}.
+Mean pooling dominates for its simplicity, but its performance under spatial shift is not well measured.
+Classical object-based image analysis~\citep{eo4geoobia} methods like Bag of Visual Words (BoVW)~\citep{csurka2004visual} aggregate hand-crafted features based on region statistics for vision tasks, but there is little work on aggregating modern pixel embeddings into patch-level representations.
+
+In this paper, we focus on the pooling step; we benchmark 11 training-free methods and 2 parametric baselines using pixel embeddings generated by three GFMs on the common EuroSAT land-cover classification dataset~\cite{helber2019eurosat}.
+We evaluate the effects of pooling choice with kNN and linear probes of the EuroSAT embeddings under the standard random and geographically disjoint dataset splits.
+
+Specifically, we release \emph{EuroSAT-Embed}: three aligned pixel embedding datasets (81,000 $64 \times 64 \times D$ GeoTIFFs) enabling reproducible pooling research without re-running GFM inference.
+We run a comprehensive grid (3 encoders $\times$ 13 pools $\times$ 2 probes $\times$ 2 splits), and report tradeoffs between accuracy, generalization gaps, and size of the embedding dimension.
+We show that \textbf{GeM pooling improves spatial-split accuracy by +5\% over mean pooling without increasing dimensionality}, while stats pooling reaches peak accuracy (+7--10\%) at 4$\times$ the embedding size.
+Parametric methods (PCA, BoVW) are inconsistent across embedding sources.
+
+\section{Data and Embeddings}
+
+\textbf{EuroSAT.}
+We use the 10-class EuroSAT land-cover dataset~\citep{helber2019eurosat} which contains 27,000 Sentinel-2 patches at 64$\times$64 pixels with classes such as forest, residential, and agricultural land.
+We evaluate on both the standard random split~\citep{neumann2019domain} and a spatial split~\citep{ekim2025distribution} that partitions samples by longitude to reduce train-test leakage via spatial autocorrelation.
+
+\textbf{EuroSAT-Embed.}
+We construct three aligned embedding datasets from GFMs spanning embedding sizes:
+(1)~\emph{EuroSAT-AEF} uses AlphaEarth~\citep{brown2025alphaearth}, which compresses annual satellite image time-series into 64-d embeddings per pixel quantized to {\footnotesize\texttt{int8}} (3.3\,GB total);
+(2)~\emph{EuroSAT-OlmoEarth} uses OlmoEarth-Nano~\citep{herzog2025olmoearth}, producing 128-d {\footnotesize\texttt{float32}} embeddings (40\,GB);
+(3)~\emph{EuroSAT-Tessera} uses Tessera~\citep{feng2025tesseratemporalembeddingssurface}, encoding temporal surface spectra into 512-d {\footnotesize\texttt{float32}} embeddings (164\,GB).
+AEF and OlmoEarth embed patch context but emit \emph{pixel-wise} vectors, whereas Tessera encodes per-pixel time-series without spatial context of adjacent pixels.
+All datasets are aligned to EuroSAT's 2018 imagery and released under \texttt{CC-BY-4.0} at {\footnotesize\url{https://hf.co/datasets/isaaccorley/eurosat-embed}}.
+
+\section{Pooling Methods}
+
+We benchmark training-free operators that compress an $H{\times}W{\times}D$ embedding tensor into a $d$-dimensional vector.
+We hypothesize that class signal lies not only in the mean but in the distribution (variance and extremes).
+For example, a residential neighborhood might share a mean embedding over space with industrial areas, but show higher variance from mixed rooftops, vegetation, and roads.
+Let $X \in \mathbb{R}^{H \times W \times D}$ denote a patch with $N{=}HW$ pixels.
+Pooling operates per channel (e.g., $\max(X)$ returns the per-channel maximum). Note that pooling methods can increase the dimensionality by a multiplier, see the Dim$\times$ column reported in Tables~\ref{tab:linear_all},~\ref{tab:knn_all}, due to concatenation of multiple statistics.
+
+\textbf{First-order statistics} ($D$-d each):
+\textit{mean} ($\mu = \frac{1}{N}\sum_i x_i$) captures the ``typical'' pixel but
+discards variation; \textit{max} preserves extreme activations; generalized mean
+(\textit{GeM}, $p{=}3$) interpolates between them~\citep{radenovic2018gem};
+\textit{center-weighted mean} applies a Gaussian ($\sigma{=}\min(H, W)/4$) to
+down-weight boundary pixels.
+
+\textbf{Distributional statistics} ($D$-d to $5D$-d):
+\textit{std} captures pixel variability; \textit{mean+std} ($2D$-d)
+and \textit{mean+max} ($2D$-d)
+concatenate complementary signals; \textit{stats} ($4D$-d) stacks
+min/max/mean/std;
+\textit{percentiles} ($5D$-d) computes the (10th, 25th, 50th, 75th,
+90th) percentiles;
+\textit{median+IQR} ($2D$-d) provides robust location and spread estimates;
+\textit{covariance} extracts the upper triangle of the pixel covariance matrix
+($D(D{+}1)/2$-d).
+
+\textbf{Parametric methods} (fit on known training set):
+\textit{PCA} projects mean-pooled embeddings to lower dimensions
+(e.g., 32-d or 64-d);
+\textit{Bag of Visual Words (BoVW)}~\citep{csurka2004visual} clusters
+pixel embeddings with mini-batch $k$-means (128 clusters) and
+represents each patch as a normalized histogram of cluster assignments.
+These require fitting and can overfit training data structure.
+We include them to contrast training-free pooling with learned
+alternatives which require a known train holdout set.
+
+\input{linear_table.tex}
+
+\section{Experimental Setup}
+
+We evaluate with two probes:
+kNN ($k{=}5$, cosine distance) as a similarity-based proxy, and
+multinomial logistic regression (L-BFGS, default
+{\footnotesize\texttt{scikit-learn}} parameters)
+for discriminative classification.
+kNN probes geometry; linear probes test linear separability.
+We standardize before linear probing while kNN normalizes implicitly
+via cosine distance.
+We evaluate on both random and geographically disjoint (spatial) splits.
+Results are reported in Tables~\ref{tab:linear_all},~\ref{tab:knn_all}.
+Code is available at
+{\footnotesize\url{https://github.com/isaaccorley/geopool}}.
+
+\section{Results}
+
+\begin{wrapfigure}{r}{0.48\linewidth}
+  \vspace{-12pt}
+  \centering
+  \includegraphics[width=\linewidth]{figures/random_vs_spatial.pdf}
+  \caption{\textbf{Random vs spatial accuracy.} Points near the
+    diagonal (where random $=$ spatial) have smaller generalization gaps.
+  }\label{fig:random_spatial}
+  \vspace{-8pt}
+\end{wrapfigure}
+
+\textbf{Distributional statistics improve generalization.}
+For linear probes, \textit{stats} pooling reaches 88--91\% on spatial splits
+(avg 89.5\%) versus 76--84\% for \textit{mean} (avg 80.6\%), a +7--10\% gain
+(Tables~\ref{tab:linear_all},~\ref{tab:knn_all}).
+\textit{Mean+max} performs similarly (avg 88.0\%) at half the size.
+On random splits, differences change to 3--5\% as spatial leakage
+boosts all methods.
+
+kNN results reveal encoder-specific patterns.
+On OlmoEarth, \textit{std} boosts kNN spatial accuracy by +11\% over
+\textit{mean}
+(75.0\% vs 64.0\%), though \textit{std} underperforms \textit{stats}
+for linear probes.
+On Tessera, \textit{covariance} pooling performs best (81.2\%).
+Second-order statistics help similarity search but are less linearly
+separable.
+
+\textbf{Parametric methods vary across encoders.}
+While \textit{BoVW} yields the highest AEF spatial accuracy for the linear probe
+(92.3\%), it fails on other sources (71.1\% on OlmoEarth-Nano).
+\textit{PCA} mirrors \textit{mean} pooling performance when output
+dimension matches embedding
+dimension.
+\textit{Stats} pooling improves all encoders without fitting on training data.
+The Dim$\times$ column highlights the tradeoff:
+\textit{center-weighted mean} is a strong
+1$\times$ option, while \textit{stats} reaches peak accuracy at 4$\times$.
+
+\textbf{Generalization gaps.}
+Figure~\ref{fig:random_spatial} shows methods diverge under distribution shift.
+For linear probes, \textit{mean} pooling drops 10\% (random to spatial);
+\textit{mean+max} drops only 6.4\%.
+The Gap column shows richer statistics generalize better:
+\textit{stats} (6.2) and
+\textit{mean+max} (6.4) are among the smallest gaps for high-performing methods,
+while \textit{max} (5.8) is smallest but lower accuracy.
+
+\textbf{Encoder sensitivity.}
+Pooling interacts with encoder architecture.
+Tessera (512-d) achieves strong random-split accuracy but also the
+largest gap under \textit{mean} pooling (12\%); higher-dimensional
+embeddings benefit
+most from summary statistics.
+AEF (64-d) shows smaller gaps, suggesting compact embeddings
+are more robust to distribution shift.
+
+\input{knn_table.tex}
+
+\section{Discussion}
+
+\textbf{Recommendation.}
+We recommend \emph{Generalized Mean Pooling (GeM)} as a drop-in replacement
+for \textit{mean} pooling: it achieves +5\% spatial accuracy while preserving
+dimensionality ($1\times$), requiring no retraining or storage overhead.
+For maximum accuracy, \textit{stats} pooling (4$\times$) or
+\textit{mean+max} (2$\times$) offer
+further gains; for kNN retrieval, \textit{covariance} or
+\textit{percentiles} are reliable.
+
+\textbf{Why distributional statistics help.}
+\textit{Mean} pooling collapses each patch to a first-moment summary, discarding intra-patch heterogeneity; this is brittle under spatial splits where train and test regions experience distribution shifts in reflectance and composition. Higher-order distributional statistics (e.g., covariance and other moments/quantiles) preserve variability between rooftops, roads, and vegetation that can separate classes with similar means. This aligns with image-retrieval results~\citep{radenovic2018gem}, where \textit{GeM} outperforms \textit{mean} pooling.
+
+\textbf{Role of embedding dimension.}
+Recommendations hold across 64--512 dimensions, but improvement
+magnitude varies.
+Tessera (512-d) shows the largest \textit{mean}-pooling gap (12\%), suggesting
+higher-dimensional embeddings benefit most from summary statistics.
+AEF (64-d, int8) shows smaller gaps, indicating compact embeddings are
+more robust to distribution shift.
+
+\textbf{Limitations.}
+We evaluate on a single benchmark (EuroSAT, 10 classes) with three
+embedding sources;
+broader coverage across datasets (BigEarthNet, fMoW) and multi-label settings
+would strengthen conclusions.
+We focus on training-free pooling; learned methods such as attention pooling
+or adaptive GeM may improve further but require task-specific
+training~\citep{touvron2022augmenting}.
+We use fixed hyperparameters ($p{=}3$ for GeM, $k{=}5$ for kNN) selected via
+preliminary sweeps; per-encoder tuning showed marginal differences.
+
+\bibliography{iclr2026_conference}
+\bibliographystyle{iclr2026_conference}
+
+\end{document}

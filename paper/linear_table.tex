@@ -1,0 +1,30 @@
+\begin{table*}[t]
+  \centering
+  \footnotesize
+  \caption{\textbf{Linear probe accuracy across embedding sources.} Gap = accuracy drop from random to spatial split. Dim$\times$ reports output dimensionality relative to embedding size $D$; PCA and BoVW are fixed-size outputs ($64/D$, $128/D$). $^*$OlmoEarth-Nano variant.}\label{tab:linear_all}
+  \resizebox{0.95\textwidth}{!}{%
+  \begin{tabular}{lc cccc|cccc|c}
+    \toprule
+    & & \multicolumn{4}{c}{Spatial split} & \multicolumn{4}{c}{Random split} & \\
+    \cmidrule(lr){3-6} \cmidrule(lr){7-10}
+    Pooling & Dim$\times$ & AEF & OlmoEarth$^*$ & Tessera & Avg & AEF & OlmoEarth$^*$ & Tessera & Avg & Gap$\downarrow$ \\
+    \midrule
+    Mean & $1\times$ & \cellperf{36}{83.9} & \cellperf{26}{75.7} & \cellperf{33}{82.2} & \cellperf{17}{80.6} & \cellperf{53}{95.4} & \cellperf{15}{82.3} & \cellperf{44}{94.2} & \cellperf{19}{90.7} & \cellperf{29}{10.0} \\
+    Center-Weighted & $1\times$ & \cellperf{39}{84.8} & \cellperf{26}{76.0} & \cellperf{37}{83.3} & \cellperf{20}{81.4} & \cellperf{59}{\textit{96.2}} & \cellperf{18}{83.1} & \cellperf{47}{94.5} & \cellperf{24}{91.3} & \cellperf{30}{9.9} \\
+    Std & $1\times$ & \cellperf{15}{76.4} & \cellperf{52}{87.5} & \cellperf{48}{86.1} & \cellperf{30}{83.3} & \cellperf{15}{90.8} & \cellperf{54}{92.9} & \cellperf{51}{95.1} & \cellperf{38}{93.0} & \cellperf{32}{9.6} \\
+    Max & $1\times$ & \cellperf{42}{86.0} & \cellperf{45}{84.0} & \cellperf{36}{82.9} & \cellperf{35}{84.3} & \cellperf{31}{92.8} & \cellperf{32}{87.0} & \cellperf{17}{90.6} & \cellperf{15}{90.1} & \cellperf{60}{\textbf{5.8}} \\
+    Median+IQR & $2\times$ & \cellperf{31}{82.0} & \cellperf{51}{87.0} & \cellperf{46}{85.5} & \cellperf{37}{84.8} & \cellperf{48}{94.8} & \cellperf{49}{91.6} & \cellperf{50}{94.9} & \cellperf{45}{93.8} & \cellperf{37}{9.0} \\
+    GeM & $1\times$ & \cellperf{39}{84.9} & \cellperf{48}{85.3} & \cellperf{52}{87.2} & \cellperf{42}{85.8} & \cellperf{54}{95.6} & \cellperf{48}{91.3} & \cellperf{53}{95.4} & \cellperf{47}{94.1} & \cellperf{42}{8.3} \\
+    Mean+Std & $2\times$ & \cellperf{32}{82.2} & \cellperf{57}{89.6} & \cellperf{49}{86.4} & \cellperf{43}{86.1} & \cellperf{58}{96.1} & \cellperf{60}{\textit{94.6}} & \cellperf{54}{95.5} & \cellperf{58}{95.4} & \cellperf{34}{9.3} \\
+    Percentiles & $5\times$ & \cellperf{38}{84.6} & \cellperf{58}{\textit{89.9}} & \cellperf{54}{\textit{87.6}} & \cellperf{49}{87.3} & \cellperf{58}{96.1} & \cellperf{59}{94.2} & \cellperf{60}{\textbf{96.3}} & \cellperf{59}{\textit{95.5}} & \cellperf{42}{8.2} \\
+    Covariance & $\frac{D+1}{2}\times$ & \cellperf{50}{\textit{88.9}} & \cellperf{52}{87.2} & \cellperf{50}{86.6} & \cellperf{51}{87.6} & \cellperf{59}{96.1} & \cellperf{57}{93.7} & \cellperf{55}{95.7} & \cellperf{56}{95.2} & \cellperf{47}{7.6} \\
+    Mean+Max & $2\times$ & \cellperf{49}{88.4} & \cellperf{54}{88.0} & \cellperf{53}{87.5} & \cellperf{52}{\textit{87.9}} & \cellperf{60}{\textbf{96.3}} & \cellperf{50}{91.8} & \cellperf{49}{94.9} & \cellperf{49}{94.3} & \cellperf{56}{6.4} \\
+    Stats & $4\times$ & \cellperf{49}{88.5} & \cellperf{60}{\textbf{90.8}} & \cellperf{60}{\textbf{89.2}} & \cellperf{60}{\textbf{89.5}} & \cellperf{59}{96.1} & \cellperf{60}{\textbf{94.6}} & \cellperf{59}{\textit{96.2}} & \cellperf{60}{\textbf{95.7}} & \cellperf{58}{\textit{6.2}} \\
+    \midrule
+    \multicolumn{11}{l}{\textit{Parametric pools (fit on train set)}} \\
+    BoVW & $\frac{128}{D}\times$ & \cellperf{60}{\textbf{92.3}} & \cellperf{15}{71.1} & \cellperf{15}{77.4} & \cellperf{15}{80.3} & \cellperf{46}{94.6} & \cellperf{33}{87.1} & \cellperf{15}{90.3} & \cellperf{19}{90.7} & \cellperf{26}{10.4} \\
+    PCA & $\frac{64}{D}\times$ & \cellperf{27}{80.6} & \cellperf{44}{83.8} & \cellperf{24}{79.8} & \cellperf{20}{81.4} & \cellperf{53}{95.4} & \cellperf{51}{92.3} & \cellperf{29}{92.2} & \cellperf{41}{93.3} & \cellperf{15}{11.9} \\
+    \bottomrule
+  \end{tabular}%
+  }
+\end{table*}
