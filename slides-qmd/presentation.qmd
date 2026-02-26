@@ -1,14 +1,14 @@
 ---
 title: "From Pixels to Patches"
-subtitle: "Pooling Strategies for Earth Embeddings"
+subtitle: "Pooling Strategies for Earth Embeddings — ICLR 2026 | ML4RS Workshop"
 author: "Isaac Corley¹, Caleb Robinson², Inbal Becker-Reshef², Juan M. Lavista Ferres²"
 institute: "¹Wherobots · ²Microsoft AI for Good Research Lab"
-date: "ICLR 2026 | ML4RS Workshop"
 format:
   revealjs:
     embed-resources: true
     theme: [default, custom.scss]
     slide-number: c/t
+    smaller: true
     title-slide-attributes:
       data-background-image: bg/wb0.png
       data-background-color: "#1B4F72"
@@ -20,7 +20,7 @@ format:
 
 :::: {.columns}
 
-::: {.column width="52%"}
+::: {.column width="55%"}
 Geospatial foundation models produce **pixel-level** embeddings (64--512 dims per pixel).
 
 But downstream labels live at **patch / region** scale --- land cover patches, crop fields, building polygons.
@@ -30,8 +30,8 @@ But downstream labels live at **patch / region** scale --- land cover patches, c
 The default --- mean pooling --- drops accuracy by >10% under geographic shift.
 :::
 
-::: {.column width="44%"}
-![](../paper/figures/hero.pdf){width="100%"}
+::: {.column width="42%"}
+![](hero.png){width="100%"}
 :::
 
 ::::
@@ -39,18 +39,22 @@ The default --- mean pooling --- drops accuracy by >10% under geographic shift.
 ## Patch vs. pixel embeddings {background-image="bg/wb4.png"}
 
 ::: {style="text-align: center;"}
-![](../slides/figures/patch_vs_pixel.png){height="65%"}
+![](../slides/figures/patch_vs_pixel.png){height="450px"}
 :::
 
+::: {style="font-size: 0.85em; text-align: center;"}
 Pixel-level models produce a vector *per pixel* --- thousands of embeddings per patch that must be aggregated.
+:::
 
 ## The pooling pipeline {background-image="bg/wb4.png"}
 
 ::: {style="text-align: center;"}
-![](../slides/figures/resolution_mismatch.png){width="90%"}
+![](../slides/figures/resolution_mismatch.png){width="85%"}
 :::
 
+::: {style="font-size: 0.85em; text-align: center;"}
 PCA pseudo-RGB of actual AlphaEarth embeddings (64-d). Pooling compresses 4,096 vectors into one --- the method matters.
+:::
 
 ## Pooling matters in other domains {background-image="bg/wb4.png"}
 
@@ -88,7 +92,7 @@ Csurka et al., 2004
 
 ::::
 
-::: {style="text-align: center; margin-top: 1em;"}
+::: {style="text-align: center; margin-top: 0.8em;"}
 Yet pooling is [largely unexplored]{.alert} for earth embeddings.
 :::
 
@@ -121,7 +125,7 @@ Reproducible pooling research **without re-running** expensive GFM inference.
 
 Evaluated on **random** (i.i.d.) and **spatial** (geographically disjoint) splits.
 
-::: {style="font-size: 0.8em;"}
+::: {style="font-size: 0.75em;"}
 `CC-BY-4.0` · [hf.co/datasets/isaaccorley/eurosat-embed](https://hf.co/datasets/isaaccorley/eurosat-embed)
 :::
 
@@ -157,23 +161,25 @@ All preserve original dimensionality (1×).
 
 :::: {.columns}
 
-::: {.column width="45%"}
+::: {.column width="48%"}
 **Distributional (training-free):**
 
 - Mean+Std, Mean+Max (2×)
 - Median+IQR (2×)
-- Stats [min/max/μ/σ] (4×)
+- Stats [min/max/$\mu$/$\sigma$] (4×)
 - Percentiles [10..90] (5×)
 - Covariance upper-tri
 :::
 
-::: {.column width="45%"}
+::: {.column width="48%"}
 **Parametric (need training data):**
 
 - PCA --- project to lower dim
 - BoVW --- $k$-means histogram
 
+::: {style="font-size: 0.85em;"}
 E.g., a residential patch and an industrial area can share a mean but differ wildly in variance.
+:::
 :::
 
 ::::
@@ -185,7 +191,7 @@ E.g., a residential patch and an industrial area can share a mean but differ wil
 ::: {.column width="32%"}
 Homogeneous classes cluster tightly; heterogeneous ones show [broad distributions]{.alert}.
 
-Mean pooling (μ, red) misses this signal.
+Mean pooling ($\mu$, red) misses this signal.
 :::
 
 ::: {.column width="66%"}
@@ -214,19 +220,31 @@ Same patch, different pooling outputs.
 
 ## Evaluation protocol {background-image="bg/wb4.png"}
 
-::: {style="text-align: center;"}
+::: {style="text-align: center; margin: 0.5em 0;"}
 
-```{mermaid}
-%%| fig-width: 10
-flowchart LR
-    A["3 encoders"] --> B["13 pooling\nmethods"]
-    B --> C["2 probes\nkNN | Linear"]
-    C --> D["2 splits\nRandom | Spatial"]
+```{=html}
+<div style="display: flex; align-items: center; justify-content: center; gap: 1em; margin: 1em auto;">
+  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
+    <strong>3 encoders</strong>
+  </div>
+  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
+  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
+    <strong>13 pooling<br/>methods</strong>
+  </div>
+  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
+  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
+    <strong>2 probes</strong><br/><span style="font-size: 0.8em;">kNN | Linear</span>
+  </div>
+  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
+  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
+    <strong>2 splits</strong><br/><span style="font-size: 0.8em;">Random | Spatial</span>
+  </div>
+</div>
 ```
 
 :::
 
-::: {style="text-align: center; font-size: 1.5em; font-weight: bold; margin: 0.5em 0;"}
+::: {style="text-align: center; font-size: 1.4em; font-weight: bold; margin: 0.5em 0;"}
 = 156 experiments
 :::
 
@@ -261,15 +279,13 @@ Linear probe on **spatial** splits:
 
 [+7--10%]{.alert} gain over mean pooling.
 
-On random splits, differences shrink to 3--5% (spatial leakage flatters everyone).
-
-The spatial split is the honest evaluation.
+On random splits, differences shrink to 3--5% (spatial leakage flatters everyone). The spatial split is the honest evaluation.
 :::
 
 ::: {.column width="48%"}
 ![](../paper/figures/random_vs_spatial.png){width="100%"}
 
-::: {style="font-size: 0.8em;"}
+::: {style="font-size: 0.75em; text-align: center;"}
 Closer to diagonal = smaller gap
 :::
 :::
@@ -280,7 +296,7 @@ Closer to diagonal = smaller gap
 
 :::: {.columns}
 
-::: {.column width="50%"}
+::: {.column width="52%"}
 **Generalized Mean** ($p{=}3$):
 $$\text{GeM} = \left(\frac{1}{N}\sum_i x_i^{\,3}\right)^{\!1/3}$$
 
@@ -288,11 +304,9 @@ $$\text{GeM} = \left(\frac{1}{N}\sum_i x_i^{\,3}\right)^{\!1/3}$$
 - Same dimensionality (1×)
 - No training, no storage overhead
 - Consistent across all three encoders
-
-Softly upweights high-activation pixels without the harsh cutoff of max pooling.
 :::
 
-::: {.column width="45%"}
+::: {.column width="44%"}
 ![](../paper/figures/performance_comparison.png){width="100%"}
 :::
 
@@ -301,7 +315,7 @@ Softly upweights high-activation pixels without the harsh cutoff of max pooling.
 ## Accuracy--dimensionality tradeoff {background-image="bg/wb4.png"}
 
 ::: {style="text-align: center;"}
-![](../paper/figures/performance_comparison.png){width="60%"}
+![](../paper/figures/performance_comparison.png){height="380px"}
 :::
 
 :::: {.columns}
@@ -330,30 +344,24 @@ Stats (+7--10%)
 ::: {.column width="30%"}
 **AlphaEarth** (64-d)
 
-BoVW hits 92.3% (linear) but fails on other encoders.
-
-Compact embeddings are naturally more robust to shift.
+BoVW hits 92.3% (linear) but fails on other encoders. Compact embeddings are naturally more robust to shift.
 :::
 
 ::: {.column width="30%"}
 **OlmoEarth** (128-d)
 
-Std alone boosts kNN by +11% over mean.
-
-Second-order stats help similarity search more than linear probes.
+Std alone boosts kNN by +11% over mean. Second-order stats help similarity search more than linear probes.
 :::
 
 ::: {.column width="30%"}
 **Tessera** (512-d)
 
-Covariance pooling excels at kNN.
-
-Largest mean-pooling gap (12%). High-dim benefits most from stats.
+Covariance pooling excels at kNN. Largest mean-pooling gap (12%). High-dim benefits most from stats.
 :::
 
 ::::
 
-::: {style="text-align: center; margin-top: 1em;"}
+::: {style="text-align: center; margin-top: 0.8em;"}
 Higher embedding dimension ⟹ more benefit from distributional statistics.
 :::
 
@@ -389,7 +397,7 @@ Mean pooling discards intra-patch heterogeneity that matters most under geograph
 | Scenario | Method | Gain | Dim |
 |----------|--------|------|-----|
 | Drop-in default | GeM ($p{=}3$) | +5% | 1× |
-| Best accuracy | Stats [min/max/μ/σ] | +7--10% | 4× |
+| Best accuracy | Stats [min/max/$\mu$/$\sigma$] | +7--10% | 4× |
 | Balanced | Mean+Max | +6--8% | 2× |
 | kNN retrieval | Covariance / Percentiles | +3--7% | varies |
 
@@ -403,17 +411,15 @@ Start with GeM. Upgrade to Stats if you can afford 4× the storage.
 
 :::: {.columns}
 
-::: {.column width="45%"}
+::: {.column width="48%"}
 **The intuition**
 
 Mean pooling collapses a patch into a single "average pixel."
 
 A residential neighborhood and an industrial park can share a similar mean but differ in variance --- mixed rooftops, roads, vegetation vs. uniform warehouses.
-
-Higher-order statistics preserve that heterogeneity.
 :::
 
-::: {.column width="45%"}
+::: {.column width="48%"}
 **Broader implications**
 
 Extends GeM results from image retrieval to the geospatial domain.
@@ -461,13 +467,13 @@ Aggregation should be a design decision, not an afterthought.
 :::: {.columns}
 
 ::: {.column width="40%"}
-![](../slides/qr_code.png){width="80%"}
+![](../slides/qr_code.png){width="70%"}
 
 Code
 :::
 
 ::: {.column width="40%"}
-![](../slides/qr_data.png){width="80%"}
+![](../slides/qr_data.png){width="70%"}
 
 Dataset
 :::
