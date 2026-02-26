@@ -139,7 +139,7 @@ def bootstrap_resample(
     classes, class_counts = np.unique(y, return_counts=True)
 
     indices = []
-    for cls, count in zip(classes, class_counts):
+    for cls, count in zip(classes, class_counts, strict=False):
         cls_indices = np.where(y == cls)[0]
         selected = rng.choice(cls_indices, size=count, replace=True)
         indices.extend(selected)
@@ -162,7 +162,7 @@ def aggregate_bootstrap_metrics(
         Dictionary with mean, std, ci_lower, ci_upper for each metric.
     """
     result = {}
-    metric_names = [k for k in all_metrics[0].keys() if k != "k"]
+    metric_names = [k for k in all_metrics[0] if k != "k"]
 
     for name in metric_names:
         values = np.array([m[name] for m in all_metrics])

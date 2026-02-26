@@ -83,8 +83,13 @@ def main() -> None:
                 for k in args.k_values:
                     if args.n_bootstraps:
                         metrics = evaluate_knn_bootstrap(
-                            X_train_sub, y_train_sub, X_test, y_test,
-                            k=k, n_bootstraps=args.n_bootstraps, seed=args.seed
+                            X_train_sub,
+                            y_train_sub,
+                            X_test,
+                            y_test,
+                            k=k,
+                            n_bootstraps=args.n_bootstraps,
+                            seed=args.seed,
                         )
                         results.append(
                             {

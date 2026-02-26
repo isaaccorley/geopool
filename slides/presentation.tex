@@ -85,6 +85,24 @@
   \end{columns}
 \end{frame}
 
+\begin{frame}{Patch vs.\ pixel embeddings}
+  \centering
+  \includegraphics[width=0.78\linewidth, height=0.65\textheight, keepaspectratio]{figures/patch_vs_pixel.pdf}
+
+  \vspace{0.3em}
+  {\small Pixel-level models produce a vector \emph{per pixel} ---
+  thousands of embeddings per patch that must be aggregated.}
+\end{frame}
+
+\begin{frame}{The pooling pipeline}
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/resolution_mismatch.pdf}
+
+  \vspace{0.5em}
+  {\small PCA pseudo-RGB of actual AlphaEarth embeddings (64-d).
+  Pooling compresses 4,096 vectors into one --- the method matters.}
+\end{frame}
+
 \begin{frame}{Pooling matters in other domains}
   \vspace{0.5em}
   \begin{columns}[T]
@@ -210,6 +228,38 @@
     E.g., a residential patch and an industrial
     area can share a mean but differ wildly
     in variance.
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Within-patch heterogeneity across classes}
+  \vspace{-0.3em}
+  \begin{columns}[c]
+    \column{0.32\textwidth}
+    Homogeneous classes cluster tightly;
+    heterogeneous ones show \alert{broad distributions}.
+
+    \vspace{0.5em}
+    Mean pooling ($\mu$, red) misses this signal.
+
+    \column{0.66\textwidth}
+    \centering
+    \includegraphics[width=\linewidth, height=0.75\textheight, keepaspectratio]{figures/heterogeneity.pdf}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{What different pooling methods capture}
+  \vspace{-0.3em}
+  \begin{columns}[c]
+    \column{0.32\textwidth}
+    Same patch, different pooling outputs.
+
+    \vspace{0.5em}
+    \textbf{Stats} ($4\!\times$ dim) captures the
+    full distribution; mean ($1\!\times$) collapses it.
+
+    \column{0.66\textwidth}
+    \centering
+    \includegraphics[width=\linewidth, height=0.75\textheight, keepaspectratio]{figures/pooling_visual.pdf}
   \end{columns}
 \end{frame}
 
