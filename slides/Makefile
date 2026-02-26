@@ -1,16 +1,17 @@
-.PHONY: all clean view
+.PHONY: all figures clean view distclean
 
 MAIN := presentation
 LATEX := xelatex
 LATEXFLAGS := -interaction=nonstopmode -shell-escape
 
-# Default target
-all: $(MAIN).pdf
+# Default target: always rebuild the PDF
+all:
+	$(LATEX) $(LATEXFLAGS) $(MAIN).tex
+	$(LATEX) $(LATEXFLAGS) $(MAIN).tex
 
-# Build PDF using xelatex (better font rendering)
-$(MAIN).pdf: $(MAIN).tex
-	$(LATEX) $(LATEXFLAGS) $(MAIN).tex
-	$(LATEX) $(LATEXFLAGS) $(MAIN).tex
+# Generate matplotlib figures (run manually when needed)
+figures:
+	python3 make_figures.py
 
 # View the PDF
 view: $(MAIN).pdf
@@ -26,3 +27,4 @@ clean:
 # Clean everything including PDF
 distclean: clean
 	rm -f $(MAIN).pdf
+	rm -f figures/*.pdf figures/*.png

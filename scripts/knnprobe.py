@@ -45,7 +45,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    train_subsets = args.train_subset if args.train_subset else [None]
+    train_subsets = args.train_subset or [None]
 
     dataset_name = args.dataset_name
     embeddings_dir = (

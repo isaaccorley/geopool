@@ -24,8 +24,9 @@ plt.rcParams.update(
     }
 )
 
-DATA = Path("/Users/isaaccorley/github/geopool/data/eurosat-aef")
-OUT = Path("/Users/isaaccorley/github/geopool/slides/figures")
+SCRIPT_DIR = Path(__file__).resolve().parent
+DATA = SCRIPT_DIR.parent / "data" / "eurosat-aef"
+OUT = SCRIPT_DIR / "figures"
 OUT.mkdir(exist_ok=True)
 
 OCEAN = "#1B4F72"
@@ -189,7 +190,9 @@ def make_heterogeneity() -> None:
         # Bottom row: distribution of pixel embeddings (first 3 PCA dims)
         ax_dist = fig.add_subplot(gs[1, col])
         proj = pca.transform(flat)
-        for dim, (dname, alpha) in enumerate(zip(["PC1", "PC2", "PC3"], [0.8, 0.5, 0.3], strict=False)):
+        for dim, (dname, alpha) in enumerate(
+            zip(["PC1", "PC2", "PC3"], [0.8, 0.5, 0.3], strict=False)
+        ):
             vals = proj[:, dim]
             ax_dist.hist(
                 vals, bins=40, alpha=alpha, color=color, label=dname, density=True, edgecolor="none"
