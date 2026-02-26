@@ -154,3 +154,18 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.synctex.gz
+*.synctex(busy)
+_minted-*/
+
