@@ -34,13 +34,13 @@ ACCENT = "#E67E22"
 GRAY = "#5D6D7E"
 
 
-def load_embedding(cls, idx=1):
+def load_embedding(cls: str, idx: int = 1) -> np.ndarray:
     path = DATA / cls / f"{cls}_{idx}.tif"
     with rasterio.open(path) as f:
         return f.read().transpose(1, 2, 0).astype(np.float32)  # H x W x D
 
 
-def pca_rgb(emb, pca_model=None):
+def pca_rgb(emb: np.ndarray, pca_model: PCA | None = None) -> tuple[np.ndarray, PCA]:
     """Project embedding to 3-channel pseudo-RGB via PCA."""
     H, W, D = emb.shape
     flat = emb.reshape(-1, D)
@@ -286,12 +286,15 @@ def make_pooling_visual() -> None:
             ax.set_xticks([2.5, 7.5, 12.5, 17.5])
             ax.set_xticklabels(["min", "max", "mean", "std"], fontsize=8)
             ax.set_title(
-                f"{name}\n(4× dim — concat all)", fontsize=11, fontweight="bold", color=color
+                f"{name}\n(4× dim — concat all)",  # noqa: RUF001
+                fontsize=11,
+                fontweight="bold",
+                color=color,
             )
         else:
             ax.bar(dims, vals, color=color, width=0.7, edgecolor="none", alpha=0.85)
             ax.set_xlabel("Dimension", fontsize=9)
-            ax.set_title(f"{name}\n(1× dim)", fontsize=11, fontweight="bold", color=color)
+            ax.set_title(f"{name}\n(1× dim)", fontsize=11, fontweight="bold", color=color)  # noqa: RUF001
 
         ax.tick_params(labelsize=8)
         ax.set_ylabel("Value", fontsize=9)
@@ -325,7 +328,7 @@ def make_resolution_mismatch() -> None:
     ax = axes[0]
     rgb, _ = pca_rgb(residential, pca)
     ax.imshow(rgb)
-    ax.set_title("Pixel embeddings\n(64 × 64 × 64-d)", fontsize=11, fontweight="bold")
+    ax.set_title("Pixel embeddings\n(64 × 64 × 64-d)", fontsize=11, fontweight="bold")  # noqa: RUF001
     ax.set_xlabel("4,096 vectors", fontsize=9, color=GRAY)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -354,7 +357,7 @@ def make_resolution_mismatch() -> None:
     pooled_norm = (pooled - pooled.min()) / (pooled.max() - pooled.min())
     bar_img = pooled_norm.reshape(1, -1)
     ax.imshow(bar_img, aspect="auto", cmap="viridis", extent=[0, 64, 0, 8])
-    ax.set_title("Pooled vector\n(1 × 64-d)", fontsize=11, fontweight="bold")
+    ax.set_title("Pooled vector\n(1 × 64-d)", fontsize=11, fontweight="bold")  # noqa: RUF001
     ax.set_xlabel("1 vector", fontsize=9, color=GRAY)
     ax.set_xticks([0, 32, 64])
     ax.set_yticks([])

@@ -23,7 +23,7 @@ def quantize_aef(image: ee.Image) -> ee.Image:
     max_value = 127
 
     sat = image.abs().pow(ee.Number(1.0).divide(power)).multiply(image.signum())
-    snapped = sat.multiply(scale).round()
+    snapped = sat.multiply(ee.Number(scale)).round()
     return snapped.clamp(min_value, max_value).add(ee.Number(127)).uint8()
 
 
