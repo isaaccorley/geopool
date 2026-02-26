@@ -1,0 +1,57 @@
+/*-- scss:defaults --*/
+
+$font-family-sans-serif: "Source Sans Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
+$presentation-heading-font: "Source Sans Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
+$presentation-heading-color: #1B4F72;
+$body-color: #2C3E50;
+$link-color: #E67E22;
+
+/*-- scss:rules --*/
+
+.reveal .slide-number {
+  color: #5D6D7E;
+  font-size: 0.7em;
+}
+
+.reveal section.has-dark-background h1,
+.reveal section.has-dark-background h2,
+.reveal section.has-dark-background h3,
+.reveal section.has-dark-background p,
+.reveal section.has-dark-background li {
+  color: white;
+}
+
+.reveal .alert {
+  color: #E67E22;
+  font-weight: bold;
+}
+
+.reveal h1 {
+  color: white;
+  background-color: #1B4F72;
+  padding: 0.4em 0.8em;
+  border-radius: 4px;
+}
+
+.reveal h2 {
+  border-bottom: 3px solid #E67E22;
+  padding-bottom: 0.2em;
+}
+
+.reveal table {
+  font-size: 0.85em;
+}
+
+.reveal table thead th {
+  background-color: #1B4F72;
+  color: white;
+  border-bottom: 2px solid #E67E22;
+}
+
+.reveal table tbody tr:nth-child(even) {
+  background-color: #f0f4f8;
+}
+
+.reveal .mermaid svg {
+  max-width: 100%;
+}
