@@ -2,13 +2,14 @@
 title: "From Pixels to Patches"
 subtitle: "Pooling Strategies for Earth Embeddings — ICLR 2026 | ML4RS Workshop"
 author: "Isaac Corley¹, Caleb Robinson², Inbal Becker-Reshef², Juan M. Lavista Ferres²"
-institute: "¹Wherobots · ²Microsoft AI for Good Research Lab"
+institute: "¹Wherobots · ²Microsoft AI for Good Research Lab<br/>ICLR 2026 | ML4RS Workshop"
+date: ""
 format:
   revealjs:
     embed-resources: true
     theme: [default, custom.scss]
     slide-number: c/t
-    smaller: true
+    auto-stretch: true
     title-slide-attributes:
       data-background-image: bg/wb0.png
       data-background-color: "#1B4F72"
@@ -30,8 +31,8 @@ But downstream labels live at **patch / region** scale --- land cover patches, c
 The default --- mean pooling --- drops accuracy by >10% under geographic shift.
 :::
 
-::: {.column width="42%"}
-![](hero.png){width="100%"}
+::: {.column width="44%"}
+![](../paper/figures/hero.png){width="100%"}
 :::
 
 ::::
@@ -222,24 +223,12 @@ Same patch, different pooling outputs.
 
 ::: {style="text-align: center; margin: 0.5em 0;"}
 
-```{=html}
-<div style="display: flex; align-items: center; justify-content: center; gap: 1em; margin: 1em auto;">
-  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
-    <strong>3 encoders</strong>
-  </div>
-  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
-  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
-    <strong>13 pooling<br/>methods</strong>
-  </div>
-  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
-  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
-    <strong>2 probes</strong><br/><span style="font-size: 0.8em;">kNN | Linear</span>
-  </div>
-  <div style="font-size: 1.5em; color: #1B4F72;">→</div>
-  <div style="background: rgba(27,79,114,0.08); border: 2px solid #1B4F72; border-radius: 8px; padding: 0.6em 1.2em; text-align: center; font-size: 0.9em;">
-    <strong>2 splits</strong><br/><span style="font-size: 0.8em;">Random | Spatial</span>
-  </div>
-</div>
+```{mermaid}
+%%| fig-width: 10
+flowchart LR
+    A["3 encoders"] --> B["13 pooling<br/>methods"]
+    B --> C["2 probes<br/>kNN | Linear"]
+    C --> D["2 splits<br/>Random | Spatial"]
 ```
 
 :::
