@@ -1,22 +1,91 @@
-# geopool
+# 🏊 GeoPool: From Pixels to Patches — Pooling Strategies for Earth Embeddings
+
+> **Accepted** at the [ICLR 2026 ML4RS Workshop](https://ml-for-rs.github.io/iclr2026/) in Rio de Janeiro, Brazil 🇧🇷
+
+[![Paper](https://img.shields.io/badge/Paper-PDF-red)](paper/iclr2026_conference.pdf)
+[![Dataset](https://img.shields.io/badge/🤗%20HuggingFace-EuroSAT--Embed-blue)](https://huggingface.co/datasets/isaaccorley/eurosat-embed)
+[![License](https://img.shields.io/badge/License-CC--BY--4.0-green)](LICENSE)
 
 Benchmark for evaluating pixel-to-patch pooling methods on geospatial foundation model embeddings.
 
-## Overview
+<p align="center">
+  <img src="paper/figures/hero.png" width="400"/>
+</p>
 
-This repository accompanies the paper: From `From Pixels to Patches: Pooling Strategies for Earth Embeddings`. We evaluate 13 pooling methods across 3 GFMs (AlphaEarth, OlmoEarth-Nano, Tessera) using the EuroSAT land-cover classification task.
+As geospatial foundation models shift from patch-level to pixel-level embeddings, practitioners must aggregate thousands of pixel vectors into patch representations. The default choice — mean pooling — discards within-patch variability and can drop accuracy by **>10%** under spatial shift. We benchmark **13 pooling methods** across **3 GFMs** (AlphaEarth, OlmoEarth, Tessera) on EuroSAT land-cover classification and release **EuroSAT-Embed**: 81,000 embedding GeoTIFFs for reproducible pooling research.
 
-## Setup
+## 📊 Key Results
 
-### Install dependencies
+**GeM pooling** is a drop-in replacement for mean pooling: **+5% spatial accuracy** without increasing embedding dimensionality. For maximum accuracy, **Stats pooling** (min/max/mean/std) reaches peak performance at 4x the embedding size. Richer pooling schemes reduce the geographic generalization gap by up to **40%** relative to mean pooling.
 
-```bash
-uv sync --dev
+<p align="center">
+  <img src="paper/figures/random_vs_spatial.png" width="700"/>
+</p>
+
+*Random vs. spatial split accuracy across encoders. Points near the diagonal generalize better under geographic shift.*
+
+## 💡 Recommendation: Use GeM Pooling
+
+GeM (Generalized Mean Pooling) interpolates between mean (`p=1`) and max (`p→∞`) pooling. With `p=3`, it emphasizes higher activations while preserving dimensionality — a one-line swap from `np.mean`.
+
+**NumPy:**
+
+```python
+import numpy as np
+
+def gem_pool(x: np.ndarray, p: float = 3.0) -> np.ndarray:
+    """Generalized mean pooling over spatial dims. x: (H, W, D) -> (D,)"""
+    powered = np.sign(x) * np.abs(x) ** p
+    pooled = powered.mean(axis=(0, 1))
+    return np.sign(pooled) * np.abs(pooled) ** (1.0 / p)
 ```
 
-## Datasets
+**PyTorch:**
 
-The dense pixel embedding variants of EuroSAT and their pooled versions for each pooling strategy can be accessed on HuggingFace [here](https://huggingface.co/datasets/isaaccorley/eurosat-embed).
+```python
+import torch
+
+def gem_pool(x: torch.Tensor, p: float = 3.0) -> torch.Tensor:
+    """Generalized mean pooling over spatial dims. x: (B, H, W, D) -> (B, D)"""
+    powered = x.sign() * x.abs().pow(p)
+    pooled = powered.mean(dim=(1, 2))
+    return pooled.sign() * pooled.abs().pow(1.0 / p)
+```
+
+## 🗂️ Pooling Methods
+
+### Training-Free
+
+| Method | Key | Dim | Description |
+|---|---|---|---|
+| Mean | `mean` | D | Global average pooling |
+| Max | `max` | D | Global max pooling |
+| Std | `std` | D | Global standard deviation |
+| GeM | `gem` | D | Generalized mean pooling (p=3) |
+| Center-Weighted | `center_weighted_mean` | D | Gaussian-weighted mean (center focus) |
+| Mean+Std | `mean_std` | 2D | Concatenation of mean and std |
+| Mean+Max | `mean_max` | 2D | Concatenation of mean and max |
+| Median+IQR | `median_iqr` | 2D | Median and interquartile range |
+| Stats | `stats` | 4D | min, max, mean, std concatenated |
+| Percentiles | `percentiles` | 5D | 10th, 25th, 50th, 75th, 90th percentiles |
+| Covariance | `flattened_cov` | D(D+1)/2 | Upper triangle of covariance matrix |
+
+### Parametric (require training data)
+
+| Method | Key | Dim | Description |
+|---|---|---|---|
+| PCA | `pca_64` | 64 | PCA on mean-pooled embeddings |
+| BoVW | `bovw_128` | 128 | Bag of Visual Words (k-means clustering) |
+
+## ⚙️ Setup
+
+```bash
+make install
+```
+
+## 📦 Datasets
+
+The dense pixel embedding variants of EuroSAT and pooled versions are on [HuggingFace](https://huggingface.co/datasets/isaaccorley/eurosat-embed).
 
 ```bash
 # pooled embeddings
@@ -34,9 +103,9 @@ wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-olmoe
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-tessera.tar.gz
 ```
 
-## Evaluation
+## 🧪 Evaluation
 
-Once the pooled embeddings are downloaded or created and stored in the `embeddings/` folder, run the following for KNN and Linear probing evaluation.
+Once pooled embeddings are downloaded/created in `embeddings/`:
 
 ### Run kNN and linear probes
 
@@ -58,10 +127,9 @@ uv run python scripts/linear_table.py --output paper/linear_table.tex
 uv run python scripts/plot_results.py
 ```
 
+## 🔧 (Optional) Generating Pixel Embeddings
 
-## (Optional) Generating Pixel Embeddings
-
-All data is made available on HuggingFace above, however, if you want to regenerate the pixel and pooled embeddings, run the following:
+All data is available on HuggingFace above. To regenerate from scratch:
 
 ### Download EuroSAT and splits
 
@@ -69,16 +137,16 @@ All data is made available on HuggingFace above, however, if you want to regener
 uv run python data/download_eurosat.py
 ```
 
-### Create EuroSAT-AEF from Google Earth Engine (requires GEE authentication)
+### Create EuroSAT-AEF from Google Earth Engine (requires GEE auth)
 
 ```bash
 uv run python data/download_eurosat_aef.py
 uv run python data/convert_aef.py
 ```
 
-### Generate EuroSAT-OlmoEarth and EuroSAT-Tessera embeddings (optional)
+### Generate EuroSAT-OlmoEarth and EuroSAT-Tessera embeddings
 
-Optional: Install the olmoearth_pretrain package (needed to generate olmoearth pixel embeddings)
+Optional: Install olmoearth_pretrain (needed for olmoearth pixel embeddings)
 
 ```bash
 uv pip install 'olmoearth_pretrain @ git+https://github.com/allenai/olmoearth_pretrain.git'
@@ -99,57 +167,22 @@ uv run python scripts/pool.py --dataset-name olmoearth-tiny
 uv run python scripts/pool.py --dataset-name olmoearth-base
 ```
 
-If you are running out of memory (OOM) then you can alternatively use the `scripts/pool-stream.py` scripts which will stream in batches albeit much slower.
+If running OOM, use `scripts/pool-stream.py` which streams in batches (slower).
 
-## Pooling Methods
-
-This section describes the pooling methods implemented in `src/geopool/pool.py`. Each method transforms a spatial embedding tensor of shape $(H, W, D)$ into a fixed-length patch descriptor.
-
-### Simple Pooling Methods
-
-| Method          | Key                    | Output Dim | Description                              |
-| --------------- | ---------------------- | ---------- | ---------------------------------------- |
-| Mean            | `mean`                 | $D$        | Global average pooling                   |
-| Max             | `max`                  | $D$        | Global max pooling                       |
-| Std             | `std`                  | $D$        | Global standard deviation                |
-| GeM             | `gem`                  | $D$        | Generalized mean pooling ($p=3$)         |
-| Center-Weighted | `center_weighted_mean` | $D$        | Gaussian-weighted mean (center focus)    |
-| Mean+Std        | `mean_std`             | $2D$       | Concatenation of mean and std            |
-| Mean+Max        | `mean_max`             | $2D$       | Concatenation of mean and max            |
-| Median+IQR      | `median_iqr`           | $2D$       | Median and interquartile range           |
-| Stats           | `stats`                | $4D$       | min, max, mean, std concatenated         |
-| Percentiles     | `percentiles`          | $5D$       | 10th, 25th, 50th, 75th, 90th percentiles |
-| Covariance      | `flattened_cov`        | $D(D+1)/2$ | Upper triangle of covariance matrix      |
-
-### Fitted Methods (require training data)
-
-| Method | Key        | Output Dim | Description                              |
-| ------ | ---------- | ---------- | ---------------------------------------- |
-| PCA    | `pca_64`   | 64         | PCA on mean-pooled embeddings            |
-| BoVW   | `bovw_128` | 128        | Bag of Visual Words (k-means clustering) |
-
-### Output Dimensions (for $D=64$)
-
-| Method                                    | Output Dim |
-| ----------------------------------------- | ---------- |
-| mean, std, max, gem, center_weighted_mean | 64         |
-| mean_std, mean_max, median_iqr            | 128        |
-| stats                                     | 256        |
-| percentiles                               | 320        |
-| flattened_cov                             | 2080       |
-| pca_64                                    | 64         |
-| bovw_128                                  | 128        |
-
-## Development
-
-### Lint and format
+## 🛠️ Development
 
 ```bash
-uv run ruff format && uv run ruff check --fix --unsafe-fixes && uv run ty check
+make check  # lint + format + typecheck
+make test   # run tests
 ```
 
-### Run tests
+## 📝 Citation
 
-```bash
-uv run pytest -v
+```bibtex
+@inproceedings{corley2026geopool,
+  title={From Pixels to Patches: Pooling Strategies for Earth Embeddings},
+  author={Corley, Isaac and Robinson, Caleb and Becker-Reshef, Inbal and Lavista Ferres, Juan M.},
+  booktitle={ICLR 2026 Workshop on Machine Learning for Remote Sensing (ML4RS)},
+  year={2026}
+}
 ```
