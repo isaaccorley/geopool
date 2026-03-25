@@ -6,6 +6,7 @@ import numpy as np
 import rasterio
 import torch
 from einops import rearrange
+from olmoearth_pretrain.data.normalize import load_computed_config  # type: ignore[import-not-found]
 from olmoearth_pretrain.model_loader import ModelID  # type: ignore[import-not-found]
 from rslearn.models.olmoearth_pretrain.model import OlmoEarth
 from rslearn.train.model_context import ModelContext, RasterImage
@@ -15,6 +16,7 @@ from tqdm import tqdm
 torch.set_float32_matmul_precision("high")
 
 H = W = 64
+STD_MULTIPLIER = 2.0
 OLMOEARTH_BANDS = (
     "B02",
     "B03",
@@ -29,6 +31,31 @@ OLMOEARTH_BANDS = (
     "B01",
     "B09",
 )
+
+
+def build_norm_params(device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build per-band normalization tensors from the OlmoEarth computed config.
+
+    Returns (min_vals, ranges) each shaped (1, C, 1, 1) for broadcasting over (B, C, H, W).
+    """
+    config = load_computed_config()["sentinel2_l2a"]
+    mins, ranges = [], []
+    for band in OLMOEARTH_BANDS:
+        mean = config[band]["mean"]
+        std = config[band]["std"]
+        min_val = mean - STD_MULTIPLIER * std
+        max_val = mean + STD_MULTIPLIER * std
+        mins.append(min_val)
+        ranges.append(max_val - min_val)
+    return (
+        torch.tensor(mins, dtype=torch.float32, device=device).reshape(1, -1, 1, 1),
+        torch.tensor(ranges, dtype=torch.float32, device=device).reshape(1, -1, 1, 1),
+    )
+
+
+def normalize(images: torch.Tensor, min_vals: torch.Tensor, ranges: torch.Tensor) -> torch.Tensor:
+    """Apply OlmoEarth normalization: (x - min) / range per band."""
+    return (images - min_vals) / ranges
 
 
 def write(input_path: str, output_path: str, embedding: np.ndarray) -> None:
@@ -101,6 +128,8 @@ if __name__ == "__main__":
     if args.compile:
         model = torch.compile(model)
 
+    norm_min, norm_range = build_norm_params(device)
+
     for split in args.splits:
         print(f"Processing {split} split...")
         dataset = EuroSAT(root=args.root, split=split, bands=OLMOEARTH_BANDS)
@@ -132,6 +161,7 @@ if __name__ == "__main__":
                 continue
 
             images = batch["image"].to(device, non_blocking=True)
+            images = normalize(images, norm_min, norm_range)
             embeddings = embed_batch(model, images)  # type: ignore[arg-type]
 
             for emb, (filepath, output_path) in zip(embeddings, batch_paths, strict=False):
