@@ -153,8 +153,8 @@ uv pip install 'olmoearth_pretrain @ git+https://github.com/allenai/olmoearth_pr
 ```
 
 ```bash
-uv run python data/embed_olmoearth.py --model-size nano
-uv run python data/embed_tessera.py
+uv run python scripts/embed_olmoearth.py --model-size nano
+uv run python scripts/embed_tessera.py
 ```
 
 ### Cache pooled embeddings
