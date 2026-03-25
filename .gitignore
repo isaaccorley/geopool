@@ -10,6 +10,10 @@ data/eurosat-olmoearth*
 data/eurosat-aef-old
 embeddings/
 .DS_Store
+global_0.1_degree_representation/
+global_0.1_degree_tiff_all/
+errors.csv
+run.sh
 
 # Node stuff:
 node_modules/

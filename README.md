@@ -83,6 +83,12 @@ def gem_pool(x: torch.Tensor, p: float = 3.0) -> torch.Tensor:
 make install
 ```
 
+For the download/embed workflow, install the extra dependency group too:
+
+```bash
+uv sync --dev --group download
+```
+
 ## 📦 Datasets
 
 The dense pixel embedding variants of EuroSAT and pooled versions are on [HuggingFace](https://huggingface.co/datasets/isaaccorley/eurosat-embed).
@@ -146,10 +152,10 @@ uv run python data/convert_aef.py
 
 ### Generate EuroSAT-OlmoEarth and EuroSAT-Tessera embeddings
 
-Optional: Install olmoearth_pretrain (needed for olmoearth pixel embeddings)
+Install the download/embed dependency group first:
 
 ```bash
-uv pip install 'olmoearth_pretrain @ git+https://github.com/allenai/olmoearth_pretrain.git'
+uv sync --dev --group download
 ```
 
 ```bash
