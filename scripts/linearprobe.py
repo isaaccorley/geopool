@@ -118,7 +118,7 @@ def main() -> None:
                     subset_str = f"n={n_actual}" if n_train is not None else "full"
                     print(
                         f"{method:10s} {split:10s} {subset_str:10s} linear "
-                        f"acc={metrics['accuracy']:.4f} f1={metrics['f1_macro']:.4f}"
+                        f"acc={metrics['accuracy']:.4f} f1={metrics['f1_macro']:.4f} C={metrics['C']}"
                     )
 
     df = pd.DataFrame(results)

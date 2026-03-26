@@ -1,10 +1,12 @@
 """Evaluation utilities for probing experiments."""
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
+
+C_GRID = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
 
 
 def subsample_dataset(
@@ -105,7 +107,8 @@ def evaluate_linear(
     X_test: np.ndarray,
     y_test: np.ndarray,
     max_iter: int = 1000,
-    C: float = 1.0,
+    C: float | list[float] | None = None,
+    cv_folds: int = 3,
 ) -> dict[str, np.ndarray | dict[str, float]]:
     X_train = sanitize_features(X_train, "Linear X_train")
     X_test = sanitize_features(X_test, "Linear X_test")
@@ -114,11 +117,37 @@ def evaluate_linear(
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    clf = LogisticRegression(max_iter=max_iter, C=C, solver="lbfgs")
-    clf.fit(X_train_scaled, y_train)
+    if C is None:
+        C_values = C_GRID
+    elif isinstance(C, list):
+        C_values = C
+    else:
+        C_values = [C]
+
+    if len(C_values) > 1:
+        clf = LogisticRegressionCV(
+            Cs=C_values,
+            cv=cv_folds,
+            max_iter=max_iter,
+            solver="lbfgs",
+            n_jobs=-1,
+            random_state=42,
+            refit=True,
+            use_legacy_attributes=False,
+            l1_ratios=(0,),
+        )
+        clf.fit(X_train_scaled, y_train)
+        chosen_c = float(clf.C_)
+    else:
+        chosen_c = C_values[0]
+        clf = LogisticRegression(max_iter=max_iter, C=chosen_c, solver="lbfgs")
+        clf.fit(X_train_scaled, y_train)
+
     y_pred = clf.predict(X_test_scaled)
 
-    return {"metrics": compute_metrics(y_test, y_pred), "y_pred": y_pred}
+    metrics = compute_metrics(y_test, y_pred)
+    metrics["C"] = chosen_c
+    return {"metrics": metrics, "y_pred": y_pred}
 
 
 def bootstrap_resample(

@@ -1,7 +1,7 @@
 .PHONY: install check test
 
 install:
-	uv sync --all-extras
+	uv sync --all-groups
 
 check:
 	uv run ruff format

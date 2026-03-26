@@ -86,7 +86,7 @@ METHOD_LABELS = {
 # Dataset display names (full names, no abbreviations)
 DATASET_LABELS = {
     "aef": "AEF",
-    "olmoearth": "OlmoEarth",
+    "olmoearth-nano": "OlmoEarth",
     "tessera": "Tessera",
 }
 
@@ -115,14 +115,14 @@ COLORS = {
 # Dataset colors for multi-model plots (vibrant, distinguishable)
 DATASET_COLORS = {
     "aef": "#2ECC71",  # Emerald green
-    "olmoearth": "#3498DB",  # Bright blue
+    "olmoearth-nano": "#3498DB",  # Bright blue
     "tessera": "#F39C12",  # Orange
 }
 
 # Dataset markers
 DATASET_MARKERS = {
     "aef": "o",
-    "olmoearth": "s",
+    "olmoearth-nano": "s",
     "tessera": "D",
 }
 
@@ -699,8 +699,8 @@ def main() -> None:
     parser.add_argument(
         "--datasets",
         nargs="+",
-        default=["aef", "olmoearth", "tessera"],
-        help="Dataset names to include (default: aef olmoearth tessera)",
+        default=["aef", "olmoearth-nano", "tessera"],
+        help="Dataset names to include (default: aef olmoearth-nano tessera)",
     )
     parser.add_argument(
         "--paper-dir",

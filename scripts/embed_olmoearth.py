@@ -1,22 +1,28 @@
 import argparse
 import os
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import numpy as np
 import rasterio
 import torch
-from einops import rearrange
-from olmoearth_pretrain.data.normalize import load_computed_config  # type: ignore[import-not-found]
-from olmoearth_pretrain.model_loader import ModelID  # type: ignore[import-not-found]
-from rslearn.models.olmoearth_pretrain.model import OlmoEarth
-from rslearn.train.model_context import ModelContext, RasterImage
+import torch.nn.functional as F
+from olmoearth_pretrain_minimal import ModelID, Normalizer, load_model_from_id
+from olmoearth_pretrain_minimal.olmoearth_pretrain_v1.nn.flexi_vit import PoolingType
+from olmoearth_pretrain_minimal.olmoearth_pretrain_v1.utils.constants import Modality
+from olmoearth_pretrain_minimal.olmoearth_pretrain_v1.utils.datatypes import MaskedOlmoEarthSample
 from torchgeo.datasets import EuroSAT
 from tqdm import tqdm
 
 torch.set_float32_matmul_precision("high")
 
-H = W = 64
 STD_MULTIPLIER = 2.0
+PATCH_SIZE = 8
+INPUT_RES = 10
+TIME_STEPS = 3
+TIMESTAMP_YEAR = 2018
+TIMESTAMP_MONTH = 5
+TIMESTAMP_DAY = 15
 OLMOEARTH_BANDS = (
     "B02",
     "B03",
@@ -33,39 +39,14 @@ OLMOEARTH_BANDS = (
 )
 
 
-def build_norm_params(device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build per-band normalization tensors from the OlmoEarth computed config.
-
-    Returns (min_vals, ranges) each shaped (1, C, 1, 1) for broadcasting over (B, C, H, W).
-    """
-    config = load_computed_config()["sentinel2_l2a"]
-    mins, ranges = [], []
-    for band in OLMOEARTH_BANDS:
-        mean = config[band]["mean"]
-        std = config[band]["std"]
-        min_val = mean - STD_MULTIPLIER * std
-        max_val = mean + STD_MULTIPLIER * std
-        mins.append(min_val)
-        ranges.append(max_val - min_val)
-    return (
-        torch.tensor(mins, dtype=torch.float32, device=device).reshape(1, -1, 1, 1),
-        torch.tensor(ranges, dtype=torch.float32, device=device).reshape(1, -1, 1, 1),
-    )
-
-
-def normalize(images: torch.Tensor, min_vals: torch.Tensor, ranges: torch.Tensor) -> torch.Tensor:
-    """Apply OlmoEarth normalization: (x - min) / range per band."""
-    return (images - min_vals) / ranges
-
-
 def write(input_path: str, output_path: str, embedding: np.ndarray) -> None:
-    embed_dim = embedding.shape[0]
+    height, width, embed_dim = embedding.shape
     with rasterio.open(input_path) as src:
         profile = {
             "driver": "GTiff",
             "dtype": "float32",
-            "width": W,
-            "height": H,
+            "width": width,
+            "height": height,
             "count": embed_dim,
             "crs": src.crs,
             "transform": src.transform,
@@ -74,16 +55,43 @@ def write(input_path: str, output_path: str, embedding: np.ndarray) -> None:
             "interleave": "band",
         }
     with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(embedding.astype(np.float32))
+        dst.write(np.moveaxis(embedding.astype(np.float32, copy=False), -1, 0))
 
 
 @torch.inference_mode()
-def embed_batch(model: torch.nn.Module, images: torch.Tensor) -> np.ndarray:
-    images = rearrange(images, "b c h w -> b c () h w")
-    inputs = [{"sentinel2_l2a": RasterImage(image=img)} for img in images]
-    context = ModelContext(inputs=inputs, metadatas=[])
-    feature_maps = model(context).feature_maps
-    return feature_maps[0].cpu().numpy()
+def embed_batch(
+    model: Any,
+    normalizer: Normalizer,
+    images: torch.Tensor,
+    device: torch.device,
+) -> np.ndarray:
+    """Embed a batch of EuroSAT images with OlmoEarth."""
+    batch_size, _, height, width = images.shape
+    sentinel2_l2a = images.permute(0, 2, 3, 1).cpu().numpy()
+    sentinel2_l2a = np.repeat(sentinel2_l2a[:, :, :, None, :], TIME_STEPS, axis=3)
+    sentinel2_l2a = normalizer.normalize(Modality.SENTINEL2_L2A, sentinel2_l2a)
+
+    timestamps = torch.zeros(batch_size, TIME_STEPS, 3, dtype=torch.long, device=device)
+    timestamps[:, :, 0] = TIMESTAMP_DAY
+    timestamps[:, :, 1] = TIMESTAMP_MONTH
+    timestamps[:, :, 2] = TIMESTAMP_YEAR
+
+    sample = MaskedOlmoEarthSample(
+        timestamps=timestamps,
+        sentinel2_l2a=torch.from_numpy(sentinel2_l2a).float().to(device),
+        sentinel2_l2a_mask=torch.zeros(
+            batch_size, height, width, TIME_STEPS, dtype=torch.long, device=device
+        ),
+    )
+
+    outputs = model.encoder(sample, patch_size=PATCH_SIZE, input_res=INPUT_RES, fast_pass=True)
+    pooled = outputs["tokens_and_masks"].pool_spatially(PoolingType.MEAN)
+    pooled = F.interpolate(
+        pooled.permute(0, 3, 1, 2),
+        size=(height, width),
+        mode="nearest",
+    )
+    return pooled.permute(0, 2, 3, 1).cpu().numpy()
 
 
 if __name__ == "__main__":
@@ -111,16 +119,8 @@ if __name__ == "__main__":
 
     device = torch.device(args.device)
 
-    if args.model_size == "nano":
-        model = OlmoEarth(model_id=ModelID.OLMOEARTH_V1_NANO, patch_size=1)
-    elif args.model_size == "tiny":
-        model = OlmoEarth(model_id=ModelID.OLMOEARTH_V1_TINY, patch_size=1)
-    elif args.model_size == "base":
-        model = OlmoEarth(model_id=ModelID.OLMOEARTH_V1_BASE, patch_size=1)
-    elif args.model_size == "large":
-        model = OlmoEarth(model_id=ModelID.OLMOEARTH_V1_LARGE, patch_size=1)
-    else:
-        raise ValueError(f"Unknown model size: {args.model_size}")
+    model_id = getattr(ModelID, f"OLMOEARTH_V1_{args.model_size.upper()}")
+    model = load_model_from_id(model_id, load_weights=True)
 
     model.eval()
     model.to(device)
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     if args.compile:
         model = torch.compile(model)
 
-    norm_min, norm_range = build_norm_params(device)
+    normalizer = Normalizer(std_multiplier=STD_MULTIPLIER)
 
     for split in args.splits:
         print(f"Processing {split} split...")
@@ -160,9 +160,8 @@ if __name__ == "__main__":
                 sample_idx += batch_size
                 continue
 
-            images = batch["image"].to(device, non_blocking=True)
-            images = normalize(images, norm_min, norm_range)
-            embeddings = embed_batch(model, images)  # type: ignore[arg-type]
+            images = batch["image"]
+            embeddings = embed_batch(model, normalizer, images, device)
 
             for emb, (filepath, output_path) in zip(embeddings, batch_paths, strict=False):
                 if os.path.exists(output_path):

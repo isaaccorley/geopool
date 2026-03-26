@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_DATASETS = ["aef", "olmoearth", "tessera"]
-EXCLUDED_POOLS: set[str] = set()
+DEFAULT_DATASETS = ["aef", "olmoearth-nano", "tessera"]
+EXCLUDED_POOLS: set[str] = {"signed_non_cancelling_gem"}
 
 POOL_LABELS = {
     "mean": "Mean",
