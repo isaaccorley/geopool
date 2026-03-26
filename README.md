@@ -12,11 +12,11 @@ Benchmark for evaluating pixel-to-patch pooling methods on geospatial foundation
   <img src="paper/figures/hero.png" width="400"/>
 </p>
 
-As geospatial foundation models shift from patch-level to pixel-level embeddings, practitioners must aggregate thousands of pixel vectors into patch representations. The default choice — mean pooling — discards within-patch variability and can drop accuracy by **>10%** under spatial shift. We benchmark **13 pooling methods** across **3 GFMs** (AlphaEarth, OlmoEarth, Tessera) on EuroSAT land-cover classification and release **EuroSAT-Embed**: 81,000 embedding GeoTIFFs for reproducible pooling research.
+As geospatial foundation models shift from patch-level to pixel-level embeddings, practitioners must aggregate thousands of pixel vectors into patch representations. We benchmark **13 pooling methods** across **3 GFMs** (AlphaEarth, OlmoEarth, Tessera) on EuroSAT land-cover classification and release **EuroSAT-Embed**: 81,000 embedding GeoTIFFs for reproducible pooling research. Across the benchmark, simple distributional pooling methods improve spatial-split performance over mean pooling and substantially reduce the random-to-spatial generalization gap.
 
 ## 📊 Key Results
 
-**GeM pooling** is a drop-in replacement for mean pooling: **+5% spatial accuracy** without increasing embedding dimensionality. For maximum accuracy, **Stats pooling** (min/max/mean/std) reaches peak performance at 4x the embedding size. Richer pooling schemes reduce the geographic generalization gap by up to **40%** relative to mean pooling.
+**Stats pooling** (min/max/mean/std) is the strongest default: for linear probes it improves average spatial accuracy from **87.3%** to **93.0%** and cuts the random-to-spatial gap from **8.8 pp** to **3.8 pp**. **Covariance pooling** reaches the best accuracy on two of three encoders when higher dimensionality is acceptable, while **mean+max** is another strong low-complexity option with a small spatial generalization gap.
 
 <p align="center">
   <img src="paper/figures/random_vs_spatial.png" width="700"/>
@@ -24,32 +24,39 @@ As geospatial foundation models shift from patch-level to pixel-level embeddings
 
 *Random vs. spatial split accuracy across encoders. Points near the diagonal generalize better under geographic shift.*
 
-## 💡 Recommendation: Use GeM Pooling
+## 💡 Recommendation: Mean Baseline, Stats Default
 
-GeM (Generalized Mean Pooling) interpolates between mean (`p=1`) and max (`p→∞`) pooling. With `p=3`, it emphasizes higher activations while preserving dimensionality — a one-line swap from `np.mean`.
+Use **mean** as a low-cost baseline. When a modest increase in dimensionality is acceptable, use **stats pooling** as the default. When maximum accuracy matters more than representation size, use **covariance pooling**. If you want a lighter-weight alternative to covariance, **mean+max** is a strong option.
 
-**NumPy:**
+**NumPy implementations:**
 
 ```python
 import numpy as np
 
-def gem_pool(x: np.ndarray, p: float = 3.0) -> np.ndarray:
-    """Generalized mean pooling over spatial dims. x: (H, W, D) -> (D,)"""
-    powered = np.sign(x) * np.abs(x) ** p
-    pooled = powered.mean(axis=(0, 1))
-    return np.sign(pooled) * np.abs(pooled) ** (1.0 / p)
-```
+def stats_pool(x: np.ndarray) -> np.ndarray:
+    """Stats pooling over spatial dims. x: (H, W, D) -> (4D,)"""
+    mins = x.min(axis=(0, 1))
+    maxs = x.max(axis=(0, 1))
+    means = x.mean(axis=(0, 1))
+    stds = x.std(axis=(0, 1))
+    return np.concatenate([mins, maxs, means, stds], axis=-1)
 
-**PyTorch:**
 
-```python
-import torch
+def mean_max_pool(x: np.ndarray) -> np.ndarray:
+    """Mean+max pooling over spatial dims. x: (H, W, D) -> (2D,)"""
+    means = x.mean(axis=(0, 1))
+    maxs = x.max(axis=(0, 1))
+    return np.concatenate([means, maxs], axis=-1)
 
-def gem_pool(x: torch.Tensor, p: float = 3.0) -> torch.Tensor:
-    """Generalized mean pooling over spatial dims. x: (B, H, W, D) -> (B, D)"""
-    powered = x.sign() * x.abs().pow(p)
-    pooled = powered.mean(dim=(1, 2))
-    return pooled.sign() * pooled.abs().pow(1.0 / p)
+
+def covariance_pool(x: np.ndarray) -> np.ndarray:
+    """Upper-triangular covariance pooling. x: (H, W, D) -> (D(D+1)/2,)"""
+    pixels = x.reshape(-1, x.shape[-1])
+    centered = pixels - pixels.mean(axis=0, keepdims=True)
+    denom = max(pixels.shape[0] - 1, 1)
+    cov = centered.T @ centered / denom
+    tri = np.triu_indices(cov.shape[0])
+    return cov[tri]
 ```
 
 ## 🗂️ Pooling Methods
@@ -97,15 +104,11 @@ The dense pixel embedding variants of EuroSAT and pooled versions are on [Huggin
 # pooled embeddings
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-aef-pooled.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-olmoearth-nano-pooled.tar.gz
-wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-olmoearth-tiny-pooled.tar.gz
-wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-olmoearth-base-pooled.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-tessera-pooled.tar.gz
 
 # pixel embeddings
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-aef.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-olmoearth-nano.tar.gz
-wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-olmoearth-tiny.tar.gz
-wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-olmoearth-base.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-tessera.tar.gz
 ```
 
@@ -178,6 +181,7 @@ If running OOM, use `scripts/pool-stream.py` which streams in batches (slower).
 ## 🛠️ Development
 
 ```bash
+make install # install deps
 make check  # lint + format + typecheck
 make test   # run tests
 ```
@@ -185,10 +189,10 @@ make test   # run tests
 ## 📝 Citation
 
 ```bibtex
-@inproceedings{corley2026geopool,
+@article{corley2026pixels,
   title={From Pixels to Patches: Pooling Strategies for Earth Embeddings},
-  author={Corley, Isaac and Robinson, Caleb and Becker-Reshef, Inbal and Lavista Ferres, Juan M.},
-  booktitle={ICLR 2026 Workshop on Machine Learning for Remote Sensing (ML4RS)},
+  author={Corley, Isaac and Robinson, Caleb and Becker-Reshef, Inbal and Ferres, Juan M Lavista},
+  journal={arXiv preprint arXiv:2603.02080},
   year={2026}
 }
 ```
