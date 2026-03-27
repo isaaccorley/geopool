@@ -25,13 +25,29 @@ plt.rcParams.update(
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA = SCRIPT_DIR.parent / "data" / "eurosat-aef"
+DATA_ROOT = SCRIPT_DIR.parent / "data"
 OUT = SCRIPT_DIR / "figures"
 OUT.mkdir(exist_ok=True)
 
 OCEAN = "#1B4F72"
 ACCENT = "#E67E22"
 GRAY = "#5D6D7E"
+
+
+def resolve_data_dir() -> Path:
+    """Return an available EuroSAT embedding directory."""
+    candidates = [
+        DATA_ROOT / "eurosat-aef",
+        DATA_ROOT / "eurosat-tessera",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    msg = "No local EuroSAT embedding directory found in data/eurosat-aef or data/eurosat-tessera"
+    raise FileNotFoundError(msg)
+
+
+DATA = resolve_data_dir()
 
 
 def load_embedding(cls: str, idx: int = 1) -> np.ndarray:
@@ -62,6 +78,7 @@ def pca_rgb(emb: np.ndarray, pca_model: PCA | None = None) -> tuple[np.ndarray, 
 # ================================================================
 def make_patch_vs_pixel() -> None:
     print("Making patch vs pixel figure...")
+    print(f"  using embeddings from {DATA.name}")
 
     # Load a few classes for visual variety
     residential = load_embedding("Residential", 100)
@@ -153,7 +170,7 @@ def make_heterogeneity() -> None:
     all_embs = []
     for cls in classes:
         emb = load_embedding(cls, classes[cls][0])
-        all_embs.append(emb.reshape(-1, 64))
+        all_embs.append(emb.reshape(-1, emb.shape[-1]))
     combined = np.vstack(all_embs)
     pca.fit(combined[::4])  # subsample for speed
 
@@ -247,8 +264,7 @@ def make_pooling_visual() -> None:
     std_pool = flat.std(axis=0)
     min_pool = flat.min(axis=0)
 
-    p = 3
-    gem_pool = np.power(np.mean(np.power(flat.astype(np.float64), p), axis=0), 1.0 / p)
+    mean_max_pool = np.concatenate([mean_pool, max_pool])
 
     pca = PCA(n_components=3)
     pca.fit(flat)
@@ -268,7 +284,7 @@ def make_pooling_visual() -> None:
     methods = [
         ("Mean pooling", mean_pool[:20], "#E74C3C", axes[0, 1]),
         ("Max pooling", max_pool[:20], "#2E86C1", axes[0, 2]),
-        ("GeM pooling (p=3)", gem_pool[:20], "#27AE60", axes[1, 0]),
+        ("Mean+Max pooling", mean_max_pool[:20], "#27AE60", axes[1, 0]),
         ("Std pooling", std_pool[:20], "#8E44AD", axes[1, 1]),
         ("Stats pooling", None, "#E67E22", axes[1, 2]),
     ]
@@ -294,7 +310,8 @@ def make_pooling_visual() -> None:
         else:
             ax.bar(dims, vals, color=color, width=0.7, edgecolor="none", alpha=0.85)
             ax.set_xlabel("Dimension", fontsize=9)
-            ax.set_title(f"{name}\n(1× dim)", fontsize=11, fontweight="bold", color=color)  # noqa: RUF001
+            mult = "2× dim" if name == "Mean+Max pooling" else "1× dim"  # noqa: RUF001
+            ax.set_title(f"{name}\n({mult})", fontsize=11, fontweight="bold", color=color)
 
         ax.tick_params(labelsize=8)
         ax.set_ylabel("Value", fontsize=9)
@@ -317,9 +334,12 @@ def make_resolution_mismatch() -> None:
     # Load diverse patches
     forest = load_embedding("Forest", 50)
     residential = load_embedding("Residential", 100)
+    H, W, D = residential.shape
 
     pca = PCA(n_components=3)
-    combined = np.vstack([forest.reshape(-1, 64), residential.reshape(-1, 64)])
+    combined = np.vstack(
+        [forest.reshape(-1, forest.shape[-1]), residential.reshape(-1, residential.shape[-1])]
+    )
     pca.fit(combined[::8])
 
     fig, axes = plt.subplots(1, 4, figsize=(16, 4.2))
@@ -328,8 +348,8 @@ def make_resolution_mismatch() -> None:
     ax = axes[0]
     rgb, _ = pca_rgb(residential, pca)
     ax.imshow(rgb)
-    ax.set_title("Pixel embeddings\n(64 × 64 × 64-d)", fontsize=11, fontweight="bold")  # noqa: RUF001
-    ax.set_xlabel("4,096 vectors", fontsize=9, color=GRAY)
+    ax.set_title(f"Pixel embeddings\n({H} × {W} × {D}-d)", fontsize=11, fontweight="bold")
+    ax.set_xlabel(f"{H * W:,} vectors", fontsize=9, color=GRAY)
     ax.set_xticks([])
     ax.set_yticks([])
     for spine in ax.spines.values():
@@ -348,18 +368,18 @@ def make_resolution_mismatch() -> None:
         arrowprops={"arrowstyle": "-|>", "color": ACCENT, "lw": 3, "mutation_scale": 25},
     )
     ax.text(5, 7, "Pool?", fontsize=16, ha="center", fontweight="bold", color=OCEAN)
-    ax.text(5, 3, "mean / GeM /\nstats / ...", fontsize=10, ha="center", color=GRAY)
+    ax.text(5, 3, "mean / mean+max /\nstats / ...", fontsize=10, ha="center", color=GRAY)
 
     # Panel 3: Single pooled vector
     ax = axes[2]
     # Represent as a color bar
-    pooled = residential.reshape(-1, 64).mean(axis=0)
+    pooled = residential.reshape(-1, D).mean(axis=0)
     pooled_norm = (pooled - pooled.min()) / (pooled.max() - pooled.min())
     bar_img = pooled_norm.reshape(1, -1)
-    ax.imshow(bar_img, aspect="auto", cmap="viridis", extent=[0, 64, 0, 8])
-    ax.set_title("Pooled vector\n(1 × 64-d)", fontsize=11, fontweight="bold")  # noqa: RUF001
+    ax.imshow(bar_img, aspect="auto", cmap="viridis", extent=[0, D, 0, 8])
+    ax.set_title(f"Pooled vector\n(1 × {D}-d)", fontsize=11, fontweight="bold")
     ax.set_xlabel("1 vector", fontsize=9, color=GRAY)
-    ax.set_xticks([0, 32, 64])
+    ax.set_xticks([0, D // 2, D])
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_edgecolor(OCEAN)
