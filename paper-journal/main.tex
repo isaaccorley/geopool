@@ -1,0 +1,148 @@
+\documentclass[journal]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{placeins}
+\usepackage{dblfloatfix}
+
+\graphicspath{{figures/}}
+
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+
+\begin{document}
+
+\title{From Pixels to Patches: Pooling Strategies for Earth Embeddings}
+
+\author{Isaac~Corley,
+        Caleb~Robinson,
+        Inbal~Becker-Reshef,
+        and~Juan~M.~Lavista~Ferres
+\thanks{Isaac Corley is with Taylor Geospatial, USA (e-mail: isaac.corley@taylorgeospatial.org).}
+\thanks{Caleb Robinson, Inbal Becker-Reshef, and Juan M. Lavista Ferres are with Microsoft AI for Good Research Lab, USA.}
+\thanks{Manuscript received XX, XX, 2026; revised XX, XX, 2026.}}
+
+\markboth{IEEE Geoscience and Remote Sensing Letters}%
+{Corley \MakeLowercase{\textit{et al.}}: Pooling Strategies for Earth Embeddings}
+
+\maketitle
+
+\begin{abstract}
+Geospatial foundation models (GFMs) increasingly expose pixel-level embedding products that can be reused across tasks without access to the underlying encoder. Downstream tasks with patch- or region-level labels require aggregating these dense pixel embeddings into a single representation---yet the choice of aggregation operator is rarely examined. We show that a single structural quantity, the ratio $N/D$ of pixels per region to embedding dimension, predicts which pooling strategy will succeed: when $N \gg D$, distributional statistics capture intra-patch heterogeneity that mean pooling discards; when $N \approx D$, second-order statistics become ill-conditioned and first-order methods dominate. To support this analysis we introduce \emph{EuroSAT-Embed}, pre-computed pixel-level embeddings from three GFMs (AlphaEarth, OlmoEarth, Tessera) for 27{,}000 EuroSAT patches, and benchmark 13 pooling operators under random and geographically disjoint splits. On EuroSAT ($N{=}4096 \gg D$), distributional statistics (\textit{stats}, \textit{signed NC-GeM}) reduce the spatial generalization gap by up to 65\% relative to mean pooling. On PASTIS (${\sim}85$K agricultural parcels, median $N{=}196$), where $N/D \approx 1.5$--$3$, covariance pooling collapses from 91\% to 58.7\% F1 while \textit{signed NC-GeM} remains the most robust method (AEF: 66.4\% F1). The $N/D$ ratio gives practitioners a principled decision rule: use \textit{mean+std} or \textit{signed NC-GeM} as defaults; add higher-order statistics only when $N \gg D$.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Geospatial foundation models, embeddings, pooling, land cover classification, crop classification, spatial generalization.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\IEEEPARstart{A}{} typical agricultural parcel in France covers 1.96\,ha---196 pixels at 10\,m resolution. A standard EuroSAT land-cover patch, by contrast, contains 4{,}096 pixels. Both settings require aggregating pixel embeddings from a geospatial foundation model (GFM) into a single patch representation, yet the effective sample size $N$ differs by a factor of 20. We show this difference determines which pooling method wins.
+
+GFMs now expose dense pixel-level embeddings as downloadable data products~\cite{fang2026earthembeddingsproductstaxonomy,jakubik2023prithvi,cong2022satmae,bastani2023satlaspretrain,corley2025landsatbench}, enabling practitioners to reuse them without access to the underlying encoder. Many downstream tasks---crop mapping~\cite{kerner2025ftw,corley2025ftwprue,corley2025globalftw}, building detection, land-cover classification---assign a single label to a region rather than a pixel, requiring a post-hoc aggregation step (Fig.~\ref{fig:pipeline}). This \textit{input-label resolution mismatch}~\cite{workman2023handling} is ubiquitous: EuroSAT~\cite{helber2019eurosat} uses $64{\times}64$ patches, PASTIS~\cite{garnot2021panoptic} uses irregular agricultural parcels. The default aggregation---mean pooling---collapses the embedding distribution to a single first-moment summary, discarding within-region variability that may carry class signal.
+
+Pooling strategies are well-studied in image retrieval---generalized mean (GeM)~\cite{radenovic2018gem}, VLAD~\cite{jegou2010vlad}, NetVLAD~\cite{arandjelovic2016netvlad}, and Fisher Vectors~\cite{perronnin2010improving}---and in temporal audio modeling~\cite{miech2017learnable}, but remain largely unexplored for GFM embeddings over irregular-polygon regions. The key challenge specific to this setting is that $N$ varies by three orders of magnitude across region types and sizes. For small parcels where $N \approx D$, the sample covariance matrix is rank-deficient, making second-order statistics unreliable. For large fixed-size patches where $N \gg D$, second-order statistics are well-estimated and outperform mean pooling by a large margin. No prior work characterizes this transition or gives practitioners a decision rule.
+
+We study the post-hoc pooling step across the full $N/D$ spectrum. Using pixel embeddings from three GFMs on two benchmarks, we benchmark 13 training-free and 2 fitted pooling methods and measure how method rankings shift with effective sample size. Our contributions are:
+\begin{itemize}
+  \item We show that $N/D$ is a sufficient decision criterion for pooling method selection, explaining rank reversals across the full method leaderboard between EuroSAT ($N/D{=}64$) and small PASTIS parcels ($N/D{\approx}1.5$) (Sec.~\ref{sec:results}).
+  \item We benchmark 13 training-free and 2 fitted pooling operators on EuroSAT (3 GFMs, random and spatial splits, kNN and linear probes), finding that distributional statistics reduce the geographic generalization gap by up to 65\% vs.\ mean pooling (Sec.~\ref{sec:results}).
+  \item We release \emph{EuroSAT-Embed}---pre-computed pixel-level embeddings from three GFMs---and all benchmark code, providing the first controlled study of post-hoc pooling for GFM embedding products (Sec.~\ref{sec:data}).
+\end{itemize}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.88\linewidth]{pipeline.pdf}
+  \caption{\textbf{Embedding pipeline for EuroSAT (top) and PASTIS (bottom).} In both settings, a GFM encodes every pixel independently and a pooling operator aggregates those pixel vectors into one patch or parcel representation. \emph{Top:} A $64{\times}64$ Sentinel-2 patch is encoded pixel-wise; all 4{,}096 pixel embeddings are pooled into a single patch vector for land-cover classification. \emph{Bottom:} Multi-temporal Sentinel-2 frames are encoded per-pixel; only pixels inside the parcel boundary (contour shown on the PCA pseudo-RGB embedding) are pooled into a single parcel vector for crop-type classification. The number of pixels per parcel $N$ varies from 5 to 3{,}440, making the ratio $N/D$ a key design parameter.}
+  \label{fig:pipeline}
+\end{figure*}
+
+\section{Data and Embeddings}
+\label{sec:data}
+
+\textbf{EuroSAT.} We use the 10-class EuroSAT land-cover dataset~\cite{helber2019eurosat}, which contains 27{,}000 Sentinel-2 patches at $64{\times}64$ pixels. We evaluate on both the standard random split~\cite{neumann2019domain} and a spatial split~\cite{ekim2025distribution,roberts2017cross} that partitions samples by longitude to reduce train-test leakage via spatial autocorrelation.
+
+\textbf{PASTIS.} We use the PASTIS panoptic segmentation dataset~\cite{garnot2021panoptic}, which contains 2{,}433 Sentinel-2 time-series patches covering France with instance-level annotations of ${\sim}85{,}000$ agricultural parcels across 18 crop classes. Parcels are irregular polygons extracted from instance masks; parcel size varies from 5 to 3{,}440 pixels (median 196). We use the standard 5-fold CV protocol (folds 1--4 train, fold 5 test). Parcels with fewer than 5 pixels are excluded.
+
+\textbf{EuroSAT-Embed.} We construct pixel-level embedding datasets from AlphaEarth~\cite{brown2025alphaearth} (AEF, 64-d int8), OlmoEarth-Nano~\cite{herzog2025olmoearth} (128-d float32, $T{=}12$ subsampled time steps), and Tessera~\cite{feng2025tesseratemporalembeddingssurface} (128-d float32, annual global). AEF and OlmoEarth embed patch context and emit pixel-wise vectors; Tessera encodes per-pixel time-series without spatial context. The same three embedding sources are applied to PASTIS parcels. We study pooling behavior, not encoder comparison.
+
+\section{Pooling Methods}
+
+We benchmark training-free operators that compress an $H{\times}W{\times}D$ embedding tensor ($N{=}HW$ pixels) into a $d$-dimensional vector.
+
+\textbf{First-order statistics} ($D$-d): \textit{mean} ($\mu = \tfrac{1}{N}\sum_i x_i$), \textit{max}, generalized mean (\textit{GeM})~\cite{radenovic2018gem}, and \textit{center-weighted mean} (down-weighting boundary pixels).
+
+\textbf{Distributional statistics} ($2D$--$5D$-d): \textit{std}, \textit{mean+std} ($2D$-d), \textit{mean+max} ($2D$-d), \textit{stats} (min/max/mean/std, $4D$-d), \textit{percentiles} ($5D$-d), \textit{median+IQR} ($2D$-d), and \textit{covariance}~\cite{lin2015bilinear} (upper triangle, $D(D{+}1)/2$-d).
+
+\textbf{Signed non-cancelling GeM (NC-GeM)} ($2D$-d): applies the power-mean separately to positive and negative activations before concatenating, preventing sign cancellation. This is the key method for variable-size regions: unlike covariance, it does not require $N > D$ to produce well-conditioned estimates.
+
+\textbf{Parametric methods}: \textit{PCA} (mean-pooled then projected) and \textit{Bag of Visual Words} (\textit{BoVW})~\cite{csurka2004visual} (mini-batch $k$-means histogram). Both operate post-hoc but fit an additional stage on the training split.
+
+\section{Experimental Setup}
+We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic regression with regularization $C$ selected by 3-fold CV on the training split. We standardize before linear probing~\cite{corley2024revisiting}. EuroSAT results appear in Tables~\ref{tab:linear_all} and~\ref{tab:knn_all} under random and spatial splits; PASTIS results (F1-macro) appear in the right columns (OE\,=\,OlmoEarth-Nano, Tess\,=\,Tessera).
+
+\input{linear_table.tex}
+
+\section{Results}
+\label{sec:results}
+
+\textbf{The N/D ratio determines the winning strategy.} The central finding, shown across both benchmarks, is that the ratio of pixels per region $N$ to embedding dimension $D$ governs which pooling method wins. EuroSAT patches have $N{=}4{,}096$ and $D{\in}\{64,128\}$, giving $N/D \geq 32$: second-order statistics are well-estimated. PASTIS parcels have a median $N{=}196$; for OlmoEarth and Tessera ($D{=}128$), $N/D \approx 1.5$---near rank-deficiency. This single structural quantity explains every major finding below.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{nd_phase_transition.pdf}
+  \caption{\textbf{Pooling performance as a function of $N/D$, the ratio of pixels per region to embedding dimension.} Each panel shows per-bin F1 (PASTIS, four parcel-size bins) and accuracy (EuroSAT) plotted against $N/D$ on a log scale for one GFM. The dashed vertical line marks $N{=}D$. To the left, where parcels are small and $N \approx D$, covariance (purple) collapses because its sample estimate becomes rank-deficient, while mean+std and signed NC-GeM remain strong. Moving right toward EuroSAT patches where $N \gg D$, covariance recovers and leads. Signed NC-GeM (blue) stays competitive across the full range---the only method to do so.}
+  \label{fig:nd_transition}
+\end{figure*}
+
+\textbf{When $N \gg D$: distributional statistics win.} On EuroSAT spatial splits, \textit{stats} pooling reaches 91--95\% accuracy (avg.\ 93.3\%) vs.\ 81--92\% for \textit{mean} (avg.\ 86.3\%), a +7.0\,pp gain (Table~\ref{tab:linear_all}). \textit{Covariance} leads on random splits for two of three encoders (OlmoEarth: 97.2\%, Tessera: 97.6\%). Fig.~\ref{fig:gap_chart} shows that distributional methods are simultaneously more accurate and more robust: \textit{mean} pooling drops 9.6\,pp from random to spatial splits; \textit{stats} drops only 3.4\,pp---a 65\% reduction in the generalization gap. \textit{Mean+max} (4.0\,pp) and \textit{covariance} (4.8\,pp) also exhibit small gaps. kNN results (Table~\ref{tab:knn_all}) show consistent trends, with \textit{stats} leading on spatial splits (avg.\ 88.0\%) and \textit{center-weighted mean} leading on random splits (avg.\ 95.3\%).
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\linewidth]{gap_chart.pdf}
+  \caption{\textbf{Distributional pooling is more accurate and more robust under spatial shift.} (a) Accuracy drop when moving from a random to a geographically disjoint split, averaged across three GFMs---shorter bars are better. Mean pooling drops 9.6\,pp; stats drops only 3.4\,pp, a 65\% reduction. (b) Spatial accuracy vs.\ generalization gap per method. Methods in the upper-left are both accurate and robust; distributional methods cluster there while mean pooling sits lower-right.}
+  \label{fig:gap_chart}
+\end{figure}
+
+\textbf{When $N \approx D$: second-order statistics collapse.} On PASTIS, \textit{covariance} drops from 91.0\% on EuroSAT to 58.7\% F1 on AEF---a 32\,pp collapse---because many parcels have $N < D$, making the sample covariance matrix rank-deficient. \textit{Stats} similarly underperforms. In contrast, \textit{signed NC-GeM} (AEF: 66.4\%, OlmoEarth: 52.7\%) and \textit{mean+std} (OlmoEarth: 54.9\%) remain robust. First-order methods (\textit{mean}, \textit{center-weighted}) are now competitive, unlike on EuroSAT. Tessera's comparatively low scores across all methods (best: 49.4\%) reflect its annual composites, which lack the seasonal phenological signal needed to discriminate crop types.
+
+\textbf{Region-size breakdown confirms the N/D prediction.} Fig.~\ref{fig:ranking_heatmap} ranks methods within four parcel-size bins averaged across all three embedding sources. For tiny parcels ($N < 50$), \textit{mean+std} and \textit{center-weighted mean} tie at avg.\ rank 2.0; for medium ($150$--$500$\,px) and large ($>500$\,px) parcels, \textit{signed NC-GeM} ranks first (2.7 and 2.3). \textit{Covariance} ranks last in the tiny and small bins and first in the large bin---a complete rank reversal that the $N/D$ ratio predicts exactly. \textit{Signed NC-GeM} is the only method that stays in the top-3 across all bins, making it the practical default for variable-size regions.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\linewidth]{ranking_heatmap.pdf}
+  \caption{\textbf{Method rankings flip as parcel size grows.} Each cell shows the average rank across AEF, OlmoEarth, and Tessera within each parcel-size bin---green is rank~1 (best), red is last. Covariance (bottom-right) ranks last for tiny parcels and first for large ones, a complete reversal explained by the $N/D$ ratio. Signed NC-GeM ($\bigstar$, highlighted in blue) is the only method that stays in the top~3 across all bins. The dashed vertical line separates per-bin results from the overall ranking.}
+  \label{fig:ranking_heatmap}
+\end{figure}
+
+\input{knn_table.tex}
+
+\subsection{PASTIS Crop Classification}
+
+Fig.~\ref{fig:ranking_heatmap} summarizes the per-bin ranking. AEF achieves the highest overall F1 because its $D{=}64$ gives a more favorable $N/D$ ratio at small parcel sizes than OlmoEarth or Tessera ($D{=}128$). This is consistent with the $N/D$ prediction: AEF's smaller embedding space makes second-order statistics viable at smaller parcel sizes.
+
+\FloatBarrier
+
+\section{Discussion}
+
+\textbf{Recommendation.} The $N/D$ ratio gives practitioners a decision rule that does not require dataset-specific tuning. When $N \gg D$ (large fixed-size patches, \eg\ $64{\times}64$ at 10\,m), use \textit{stats} or \textit{covariance} for peak accuracy; \textit{stats} is more robust to distribution shift. When $N \approx D$ or regions are variable-size (parcels, fields, buildings), use \textit{signed NC-GeM}: it is the only method in the top-3 across all parcel sizes. \textit{Mean} remains a useful lower bound. Notably, accuracy and robustness are aligned: \textit{stats} and \textit{signed NC-GeM} are simultaneously more accurate and more robust than \textit{mean}, with no accuracy--robustness tradeoff.
+
+\textbf{Why distributional statistics help.} Mean pooling collapses each region to a first-moment summary, discarding intra-region heterogeneity. A residential neighborhood and an industrial zone may share a mean embedding while differing in variance: the mean erases that distinction; \textit{stats} or \textit{signed NC-GeM} preserves it. This signal is reliable only when $N$ is large enough to estimate higher moments---which is precisely what $N/D$ measures.
+
+\textbf{Practical applications.} The $N/D$ framework maps directly onto GIS zonal statistics workflows~\cite{cressie2015statistics,eo4geoobia}, where raster pixel values are aggregated over vector polygons (agricultural fields, building footprints, administrative units, ecological zones). As GFM embedding products become available at continental scale~\cite{fang2026earthembeddingsproductstaxonomy}, practitioners who run polygon-level inference---crop monitoring~\cite{kerner2025ftw}, habitat classification, urban mapping---can apply our decision rule at inference time with no additional training: use \textit{signed NC-GeM} for variable-size or small polygons, \textit{stats} or \textit{covariance} for large fixed chips.
+
+\textbf{Limitations.} We evaluate on EuroSAT (10 classes) and PASTIS (18 classes) with three embedding sources; broader coverage (\eg, BigEarthNet~\cite{sumbul2019bigearthnet}, fMoW~\cite{christie2018functional}, multi-label settings) would strengthen conclusions. OlmoEarth is evaluated with $T{=}12$ subsampled time steps. We focus on training-free pooling; learned aggregation~\cite{touvron2022augmenting} may improve further but requires encoder access.
+
+\section{Conclusion}
+
+We showed that the pixel-to-dimension ratio $N/D$ is a principled decision criterion for post-hoc pooling of geospatial foundation model embeddings, unifying results across two benchmarks and three GFMs. When $N \gg D$, distributional statistics reduce the spatial generalization gap by up to 65\% and improve classification accuracy by up to 7\,pp over mean pooling; when $N \approx D$, second-order statistics collapse and \textit{signed NC-GeM} is the most robust alternative. We recommend \textit{signed NC-GeM} as the default for variable-size regions and \textit{stats} for large fixed-size patches.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

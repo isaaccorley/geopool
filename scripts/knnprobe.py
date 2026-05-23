@@ -7,10 +7,10 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-from geopool.evaluation import evaluate_knn, evaluate_knn_bootstrap, subsample_dataset
+from geopool.evaluation import evaluate_knn, evaluate_knn_bootstrap, evaluate_knn_faiss, subsample_dataset
 from geopool.pool import BOVW_VARIANTS, PCA_VARIANTS, POOL_METHODS
 
-SPLITS = ["standard", "spatial"]
+DEFAULT_SPLITS = ["standard", "spatial"]
 
 
 def load_npz(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -43,9 +43,33 @@ def main() -> None:
         default=None,
         help="Number of bootstrap iterations. If set, reports mean, std, and 95%% CI.",
     )
+    parser.add_argument(
+        "--splits",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Split names to evaluate (default: standard spatial). Use 'pastis' for PASTIS parcels.",
+    )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Force CPU FAISS index (default: use GPU if available).",
+    )
+    parser.add_argument(
+        "--methods",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Restrict to these pool methods (default: all found in embeddings-dir).",
+    )
     args = parser.parse_args()
 
+    import faiss
+    use_gpu = not args.cpu and faiss.get_num_gpus() > 0
+    print(f"FAISS KNN: {'GPU' if use_gpu else 'CPU'} ({faiss.get_num_gpus()} GPU(s) detected)")
+
     train_subsets = args.train_subset or [None]
+    splits = args.splits if args.splits else DEFAULT_SPLITS
 
     dataset_name = args.dataset_name
     embeddings_dir = (
@@ -54,6 +78,8 @@ def main() -> None:
     results = []
 
     all_methods = list(POOL_METHODS.keys()) + list(PCA_VARIANTS.keys()) + list(BOVW_VARIANTS.keys())
+    if args.methods:
+        all_methods = args.methods
 
     for method in all_methods:
         method_dir = embeddings_dir / method
@@ -61,7 +87,7 @@ def main() -> None:
             print(f"Skipping {method} (not found)")
             continue
 
-        for split in SPLITS:
+        for split in splits:
             npz_path = method_dir / f"{split}.npz"
             if not npz_path.exists():
                 print(f"Skipping {method}/{split} (file missing)")
@@ -107,7 +133,7 @@ def main() -> None:
                             f"f1={metrics['f1_macro_mean']:.4f}±{metrics['f1_macro_std']:.4f}"
                         )
                     else:
-                        res = evaluate_knn(X_train_sub, y_train_sub, X_test, y_test, k=k)
+                        res = evaluate_knn_faiss(X_train_sub, y_train_sub, X_test, y_test, k=k, use_gpu=use_gpu)
                         metrics = cast("dict[str, float]", res["metrics"])
                         results.append(
                             {

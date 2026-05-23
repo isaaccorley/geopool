@@ -75,6 +75,33 @@ def pool_gem(emb: np.ndarray, p: float = 3.0) -> np.ndarray:
     return np.sign(pooled) * np.abs(pooled) ** (1.0 / p)
 
 
+def pool_adaptive_nc_gem(
+    emb: np.ndarray, p_max: float = 3.0, eps: float = 1e-6
+) -> np.ndarray:
+    """NC-GeM with power p that scales with effective sample size N.
+
+    When N is small relative to D (few pixels per region), p→1 (≈mean pooling),
+    avoiding noisy power-mean amplification. When N≫D, p→p_max (≈standard NC-GeM).
+    N_ref is set to the embedding dimension D so the transition is at N/D=1.
+    """
+    if emb.ndim == 3:
+        N = emb.shape[0] * emb.shape[1]
+        D = emb.shape[2]
+    elif emb.ndim == 4:
+        N = emb.shape[1] * emb.shape[2]
+        D = emb.shape[3]
+    else:
+        raise ValueError(f"need 3D or 4D array, got {emb.ndim}D")
+    n_ref = float(D)
+    p = 1.0 + (p_max - 1.0) * min(1.0, N / n_ref)
+    pos = np.maximum(emb, 0.0)
+    neg = np.maximum(-emb, 0.0)
+    ax = _spatial_axes(emb)
+    pos_pooled = np.mean(np.maximum(pos, eps) ** p, axis=ax) ** (1.0 / p)
+    neg_pooled = np.mean(np.maximum(neg, eps) ** p, axis=ax) ** (1.0 / p)
+    return np.concatenate([pos_pooled, neg_pooled], axis=_concat_axis(emb))
+
+
 def pool_signed_non_cancelling_gem(
     emb: np.ndarray, p: float = 3.0, eps: float = 1e-6
 ) -> np.ndarray:
@@ -307,6 +334,7 @@ POOL_METHODS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
     "max": pool_max,
     "gem": pool_gem,
     "signed_non_cancelling_gem": pool_signed_non_cancelling_gem,
+    "adaptive_nc_gem": pool_adaptive_nc_gem,
     "mean_max": pool_mean_max,
     "percentiles": pool_percentiles,
     "center_weighted_mean": pool_center_weighted_mean,
@@ -323,7 +351,7 @@ ALL_METHODS = list(POOL_METHODS.keys()) + FITTED_METHODS
 def get_output_dim(method: str, input_dim: int = 64) -> int:
     if method in {"mean", "std", "max", "gem", "center_weighted_mean"}:
         return input_dim
-    if method == "signed_non_cancelling_gem":
+    if method in {"signed_non_cancelling_gem", "adaptive_nc_gem"}:
         return 2 * input_dim
     if method == "mean_std":
         return 2 * input_dim

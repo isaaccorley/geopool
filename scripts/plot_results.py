@@ -88,6 +88,9 @@ DATASET_LABELS = {
     "aef": "AEF",
     "olmoearth-nano": "OlmoEarth",
     "tessera": "Tessera",
+    "eurosat-aef": "AEF",
+    "eurosat-olmoearth": "OlmoEarth",
+    "eurosat-tessera": "Tessera",
 }
 
 
@@ -117,6 +120,9 @@ DATASET_COLORS = {
     "aef": "#2ECC71",  # Emerald green
     "olmoearth-nano": "#3498DB",  # Bright blue
     "tessera": "#F39C12",  # Orange
+    "eurosat-aef": "#2ECC71",
+    "eurosat-olmoearth": "#3498DB",
+    "eurosat-tessera": "#F39C12",
 }
 
 # Dataset markers
@@ -124,6 +130,9 @@ DATASET_MARKERS = {
     "aef": "o",
     "olmoearth-nano": "s",
     "tessera": "D",
+    "eurosat-aef": "o",
+    "eurosat-olmoearth": "s",
+    "eurosat-tessera": "D",
 }
 
 

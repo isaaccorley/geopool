@@ -1,0 +1,28 @@
+\begin{table}[t]
+  \centering
+  \setlength{\tabcolsep}{3pt}
+  \footnotesize
+  \caption{Linear probe F1-macro (\%) on PASTIS-R by parcel size, averaged across AEF, OlmoEarth-Nano, and Tessera. Cell shading per column (darker = higher). Best in \textbf{bold}, second-best in \textit{italics}. Parcel counts: overall $n{=}16{,}640$; tiny $n{=}2{,}437$; small $n{=}6{,}214$; medium $n{=}5{,}956$; large $n{=}2{,}033$.}\label{tab:area_breakdown}
+  \begin{tabular}{lccccc}
+    \toprule
+    Pooling & Overall & Tiny & Small & Medium & Large \\
+    & & $<$50\,px & 50--150\,px & 150--500\,px & $>$500\,px \\
+    \midrule
+    Mean & \cellperf{59}{56.1} & \cellperf{57}{38.0} & \cellperf{59}{51.1} & \cellperf{59}{59.8} & \cellperf{57}{62.6} \\
+    Std & \cellperf{24}{37.4} & \cellperf{16}{22.2} & \cellperf{22}{32.2} & \cellperf{26}{40.7} & \cellperf{27}{43.3} \\
+    GeM & \cellperf{55}{53.6} & \cellperf{56}{37.3} & \cellperf{54}{48.7} & \cellperf{54}{56.9} & \cellperf{53}{59.9} \\
+    Signed NC-GeM & \cellperf{59}{56.0} & \cellperf{56}{37.7} & \cellperf{58}{50.8} & \cellperf{59}{59.7} & \cellperf{60}{\textbf{64.6}} \\
+    Center-Weighted & \cellperf{60}{\textit{56.3}} & \cellperf{60}{\textit{39.0}} & \cellperf{60}{\textbf{51.6}} & \cellperf{59}{59.8} & \cellperf{56}{62.3} \\
+    Max & \cellperf{43}{47.4} & \cellperf{47}{33.9} & \cellperf{42}{42.5} & \cellperf{42}{49.9} & \cellperf{44}{54.1} \\
+    Mean+Std & \cellperf{60}{\textbf{56.4}} & \cellperf{57}{38.1} & \cellperf{60}{51.4} & \cellperf{60}{\textbf{60.3}} & \cellperf{59}{63.7} \\
+    Mean+Max & \cellperf{59}{56.1} & \cellperf{60}{\textbf{39.0}} & \cellperf{58}{50.8} & \cellperf{58}{59.3} & \cellperf{59}{\textit{63.9}} \\
+    Percentiles & \cellperf{59}{55.9} & \cellperf{55}{37.3} & \cellperf{60}{\textit{51.5}} & \cellperf{59}{59.4} & \cellperf{57}{62.8} \\
+    Median+IQR & \cellperf{57}{54.6} & \cellperf{57}{37.8} & \cellperf{56}{49.7} & \cellperf{56}{58.2} & \cellperf{54}{60.9} \\
+    Stats & \cellperf{59}{55.9} & \cellperf{58}{38.2} & \cellperf{59}{51.0} & \cellperf{59}{\textit{59.9}} & \cellperf{57}{62.8} \\
+    \midrule
+    \multicolumn{6}{l}{\textit{Parametric}} \\
+    PCA & \cellperf{55}{53.6} & \cellperf{54}{36.6} & \cellperf{56}{49.4} & \cellperf{54}{56.8} & \cellperf{52}{59.1} \\
+    BoVW & \cellperf{15}{32.6} & \cellperf{15}{21.8} & \cellperf{15}{28.9} & \cellperf{15}{34.4} & \cellperf{15}{35.4} \\
+    \bottomrule
+  \end{tabular}
+\end{table}

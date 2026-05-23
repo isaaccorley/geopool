@@ -1,0 +1,34 @@
+\begin{table*}[b]
+  \centering
+  \setlength{\tabcolsep}{3.5pt}
+  \footnotesize
+  \caption{kNN ($k{=}5$) results on EuroSAT (accuracy, \%) and PASTIS (F1-macro, \%). Best per column in \textbf{bold}, second-best in \textit{italics}. Gap\,=\,accuracy drop from random to spatial split. Dim\,=\,output embedding size relative to encoder dimension $D$. \colorbox{blue!10}{\strut Signed NC-GeM} and \colorbox{green!10}{\strut Stats} are highlighted as recommended methods. $^*$OlmoEarth-Nano; OE\,=\,OlmoEarth; Tess\,=\,Tessera.}\label{tab:knn_all}
+  \begin{tabular}{lccccc|cccc|c|cccc}
+    \toprule
+    & & \multicolumn{4}{c}{Spatial split} & \multicolumn{4}{c}{Random split} & & \multicolumn{4}{c}{PASTIS} \\
+    \cmidrule(lr){3-6} \cmidrule(lr){7-10} \cmidrule(lr){12-15}
+    Pooling & Dim & AEF & OE$^*$ & Tess & Avg & AEF & OE$^*$ & Tess & Avg & Gap$\downarrow$ & AEF & OE$^*$ & Tess & Avg \\
+    \midrule
+    Mean            & $D$              & 85.5 & 87.8 & 84.7 & 86.0 & 94.6 & 94.8 & 94.9 & 94.8 & 8.8 & 56.5 & \textbf{41.1} & \textbf{43.8} & \textbf{47.1} \\
+    Std             & $D$              & 78.1 & 81.7 & 84.0 & 81.3 & 93.7 & 93.3 & 94.1 & 93.7 & 12.4 & 48.2 & 14.4 & 37.2 & 33.3 \\
+    GeM             & $D$              & 85.7 & 86.6 & 85.4 & 85.9 & 94.6 & 93.3 & 95.1 & 94.3 & 8.5 & 54.2 & 36.6 & 43.3 & 44.7 \\
+    Center-Weighted & $D$              & 86.0 & 87.8 & 85.5 & 86.4 & \textbf{95.4} & \textbf{95.0} & 95.5 & \textbf{95.3} & 8.9 & \textit{57.1} & \textit{40.3} & \textit{43.7} & \textit{47.0} \\
+    Max             & $D$              & 80.5 & 85.5 & 80.8 & 82.3 & 90.5 & 91.4 & 92.5 & 91.5 & 9.2 & 46.0 & 27.6 & 39.3 & 37.6 \\
+    \addlinespace[4pt]
+    \rowcolor{blue!10}
+    Signed NC-GeM   & $2D$             & 85.7 & 87.9 & 85.4 & 86.3 & 94.7 & \textit{95.0} & 95.1 & 94.9 & 8.6 & \textbf{57.7} & 38.7 & 42.5 & 46.3 \\
+    \addlinespace[4pt]
+    Mean+Std        & $2D$             & 86.4 & \textit{88.3} & 86.7 & \textit{87.1} & 94.9 & 94.9 & 95.3 & \textit{95.0} & 7.9 & 56.7 & 39.7 & 43.5 & 46.6 \\
+    Mean+Max        & $2D$             & 85.3 & 87.9 & 86.9 & 86.7 & 94.7 & 94.4 & \textbf{95.8} & 94.9 & 8.2 & 53.0 & 35.2 & 42.7 & 43.6 \\
+    Median+IQR      & $2D$             & 86.0 & 86.0 & 85.7 & 85.9 & 94.1 & 94.0 & 94.4 & 94.1 & 8.2 & 55.7 & 35.7 & 43.3 & 44.9 \\
+    Percentiles     & $5D$             & \textit{86.7} & 87.5 & 86.2 & 86.8 & 94.6 & 94.9 & 95.4 & 95.0 & 8.2 & 56.6 & 39.1 & 43.0 & 46.3 \\
+    \rowcolor{green!10}
+    Stats           & $4D$             & \textbf{86.9} & 87.6 & \textit{89.3} & \textbf{87.9} & \textit{95.0} & 94.4 & \textit{95.6} & 95.0 & 7.1 & 52.1 & 34.3 & 42.5 & 43.0 \\
+    Covariance      & $D(D{+}1)/2$     & 84.4 & 84.8 & \textbf{89.8} & 86.4 & 93.4 & 94.3 & 94.5 & 94.1 & 7.7 & 47.6 & 22.4 & 39.6 & 36.6 \\
+    \midrule
+    \multicolumn{15}{l}{\textit{Parametric (fit on train split)}} \\[2pt]
+    PCA             & $64$             & 85.3 & \textbf{88.4} & 86.1 & 86.6 & 93.5 & 94.1 & 92.7 & 93.5 & \textit{6.8} & 56.2 & 38.8 & 43.3 & 46.1 \\
+    BoVW            & $128$            & 84.0 & 82.1 & 87.4 & 84.5 & 90.7 & 90.3 & 90.2 & 90.4 & \textbf{5.9} & 43.6 & 22.1 & 14.1 & 26.6 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
