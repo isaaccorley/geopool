@@ -57,7 +57,7 @@ We study the post-hoc pooling step across the full $N/D$ spectrum. Using pixel e
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.88\linewidth]{pipeline.pdf}
+  \includegraphics[width=0.82\linewidth]{pipeline.pdf}
   \caption{\textbf{Embedding pipeline for EuroSAT (top) and PASTIS (bottom).} In both settings, a GFM encodes every pixel independently and a pooling operator aggregates those pixel vectors into one patch or parcel representation. \emph{Top:} A $64{\times}64$ Sentinel-2 patch is encoded pixel-wise; all 4{,}096 pixel embeddings are pooled into a single patch vector for land-cover classification. \emph{Bottom:} Multi-temporal Sentinel-2 frames are encoded per-pixel; only pixels inside the parcel boundary (contour shown on the PCA pseudo-RGB embedding) are pooled into a single parcel vector for crop-type classification. The number of pixels per parcel $N$ varies from 5 to 3{,}440, making the ratio $N/D$ a key design parameter.}
   \label{fig:pipeline}
 \end{figure*}
