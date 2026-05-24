@@ -40,7 +40,12 @@ METHODS = {
 }
 
 # Average across datasets, compute N/D for each point
-fig, axes = plt.subplots(1, 3, figsize=(12, 3.8), sharey=False)
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.8), sharey=True, sharex=True)
+YLIM = (0.1, 1.0)
+YTICKS = [0.2, 0.4, 0.6, 0.8, 1.0]
+# Match rightmost (Tessera, D=128) x-range: 25/128 ≈ 0.2 to 4096/128 = 32
+XLIM = (0.15, 40.0)
+XTICKS = [0.1, 1.0, 10.0]
 datasets = [("aef", "AEF  ($D{=}64$)"), ("olmoearth", "OlmoEarth  ($D{=}128$)"), ("tessera", "Tessera  ($D{=}128$)")]
 
 for ax, (ds, ds_label) in zip(axes, datasets):
@@ -73,12 +78,17 @@ for ax, (ds, ds_label) in zip(axes, datasets):
                 markeredgecolor=style["color"], markeredgewidth=1.5,
                 label=style["label"], zorder=3)
 
+    ax.set_ylim(*YLIM)
+    ax.set_yticks(YTICKS)
+
     # N/D=1 reference line
     ax.axvline(1.0, color="#cccccc", lw=1.2, ls="--", zorder=1)
-    ax.text(1.05, ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 0.3,
-            "$N{=}D$", fontsize=7.5, color="#999999", va="bottom")
+    ax.text(1.05, YLIM[0], "$N{=}D$", fontsize=7.5, color="#999999", va="bottom")
 
     ax.set_xscale("log")
+    ax.set_xlim(*XLIM)
+    ax.set_xticks(XTICKS)
+    ax.set_xticklabels([str(t) for t in XTICKS])
     ax.set_xlabel("$N / D$  (pixels per region / embedding dim)", fontsize=9)
     ax.set_ylabel("Performance", fontsize=9)
     ax.set_title(ds_label, fontsize=10, fontweight="bold", pad=6)  # panel label kept
@@ -87,8 +97,7 @@ for ax, (ds, ds_label) in zip(axes, datasets):
 
     # Label EuroSAT landmark
     ax.axvline(EUROSAT_N / d_dim, color="#eeeeee", lw=1.0, ls=":", zorder=1)
-    ax.text(EUROSAT_N / d_dim * 0.88,
-            ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 0.3,
+    ax.text(EUROSAT_N / d_dim * 0.88, YLIM[0],
             "EuroSAT", fontsize=6.5, color="#bbbbbb", va="bottom", ha="right")
 
     # PASTIS region shading
