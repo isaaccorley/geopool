@@ -18,7 +18,7 @@
 
 \begin{document}
 
-\title{From Pixels to Patches: Pooling Strategies for Earth Embeddings}
+\title{A Pixel-to-Dimension Rule for Pooling Earth Embeddings}
 
 \author{Isaac~Corley,
         Caleb~Robinson,
@@ -29,12 +29,12 @@
 \thanks{Manuscript received XX, XX, 2026; revised XX, XX, 2026.}}
 
 \markboth{IEEE Geoscience and Remote Sensing Letters}%
-{Corley \MakeLowercase{\textit{et al.}}: Pooling Strategies for Earth Embeddings}
+{Corley \MakeLowercase{\textit{et al.}}: A Pixel-to-Dimension Rule}
 
 \maketitle
 
 \begin{abstract}
-Geospatial foundation models (GFMs) increasingly publish pixel-level embedding products that practitioners reuse without access to the encoder. Downstream tasks with patch- or region-level labels must aggregate these dense pixel embeddings into a single vector, yet the choice of pooling operator is rarely examined. We show that one structural quantity---the ratio $N/D$ of pixels per region to embedding dimension---governs whether second-order pooling (covariance, full distributional statistics) is viable. When $N \gg D$ (e.g.\ $64{\times}64$ fixed chips), second-order statistics capture intra-region heterogeneity that mean pooling discards; when $N \approx D$ (small parcels, fields, buildings), the sample second-moment matrix is ill-conditioned and covariance collapses, while first-order distributional pooling (\emph{mean+std}, \emph{center-weighted}) remains stable. We benchmark 13 operators on EuroSAT (10 classes, $N{=}4096$) and PASTIS (18 crop classes, ${\sim}85$K parcels, median $N{=}196$) across three GFMs (AlphaEarth, OlmoEarth-Nano, Tessera). On EuroSAT, distributional statistics shrink the random$\to$spatial accuracy gap from 9.6 to 3.4\,pp averaged across encoders (per-encoder reductions 43--76\%); covariance drops from 91.0\% (EuroSAT) to 58.7\% F1 (PASTIS, AEF) while \emph{mean+std} is the only training-free method to stay in the top three across the small, medium, and large parcel-size bins. We give practitioners a one-step decision rule and release \emph{EuroSAT-Embed}, \emph{PASTIS-Embed}, and benchmark code.\footnote{Code: \url{https://github.com/isaaccorley/geopool}; data: \url{https://huggingface.co/datasets/isaaccorley/eurosat-embed} and \url{https://huggingface.co/datasets/isaaccorley/pastis-embed}.}
+Geospatial foundation models (GFMs) increasingly publish pixel-level embedding products that practitioners reuse without access to the encoder. Downstream patch- and region-level tasks must aggregate these dense embeddings into a single vector, yet pooling is usually treated as a default preprocessing step. We show that the ratio $N/D$ of pixels per region to embedding dimension predicts when higher-order pooling is reliable: fixed chips with $N \gg D$ benefit from distributional statistics, while variable-size parcels with $N \approx D$ expose covariance pooling as an unstable estimator. Across EuroSAT and PASTIS embeddings from AlphaEarth, OlmoEarth-Nano, and Tessera, distributional pooling reduces geographic generalization gaps on high-$N/D$ chips, but PASTIS acts as the failure case where covariance drops by more than 30\,pp and first-order summaries such as \emph{mean+std} and \emph{center-weighted} remain competitive. We give practitioners a one-step decision rule and release \emph{EuroSAT-Embed}, \emph{PASTIS-Embed}, and benchmark code.\footnote{Code: \url{https://github.com/isaaccorley/geopool}; data: \url{https://huggingface.co/datasets/isaaccorley/eurosat-embed} and \url{https://huggingface.co/datasets/isaaccorley/pastis-embed}.}
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -44,7 +44,14 @@ Geospatial foundation models, embeddings, pooling, land cover classification, cr
 \section{Introduction}
 \IEEEPARstart{A}{} typical agricultural parcel in France covers 1.96\,ha---196 pixels at 10\,m resolution. A standard EuroSAT land-cover patch, by contrast, contains 4{,}096 pixels. Both settings require aggregating pixel embeddings from a geospatial foundation model (GFM) into a single patch-level vector, yet the number of pixels $N$ available for that summary differs by a factor of twenty. We show this difference, relative to the embedding dimension $D$, determines which pooling method wins.
 
-GFMs now publish dense pixel-level embeddings as downloadable data products~\cite{fang2026earthembeddingsproductstaxonomy,jakubik2023prithvi,cong2022satmae,bastani2023satlaspretrain,corley2025landsatbench}, enabling practitioners to reuse them without access to the underlying encoder. Many downstream tasks---crop mapping~\cite{kerner2025ftw,corley2025ftwprue,corley2025globalftw}, building detection, land-cover classification---assign a single label to a region rather than a pixel, requiring a post-hoc aggregation step (Fig.~\ref{fig:pipeline}). This \textit{input-label resolution mismatch}~\cite{workman2023handling} is ubiquitous: EuroSAT~\cite{helber2019eurosat} uses $64{\times}64$ patches, PASTIS~\cite{garnot2021panoptic} uses irregular agricultural parcels. The default aggregation---mean pooling---collapses each region to its average vector, discarding within-region variability that we show carries class signal.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{nd_rule.pdf}
+  \caption{\textbf{A one-number rule for pooling.} When a labeled region has many more pixels than embedding dimensions ($N \gg D$), higher-order statistics can be estimated reliably and distributional pooling wins. When regions are small or variable-size ($N \approx D$ or $N < D$), covariance becomes ill-conditioned and first-order summaries are safer.}
+  \label{fig:nd_rule}
+\end{figure}
+
+GFMs now publish dense pixel-level embeddings as downloadable data products~\cite{fang2026earthembeddingsproductstaxonomy,jakubik2023prithvi,cong2022satmae,bastani2023satlaspretrain,corley2025landsatbench}, enabling practitioners to reuse them without access to the underlying encoder. Many downstream tasks---crop mapping~\cite{kerner2025ftw,corley2025ftwprue,corley2025globalftw}, building detection, land-cover classification---assign a single label to a region rather than a pixel, requiring a post-hoc aggregation step. This \textit{input-label resolution mismatch}~\cite{workman2023handling} is ubiquitous: EuroSAT~\cite{helber2019eurosat} uses $64{\times}64$ patches, PASTIS~\cite{garnot2021panoptic} uses irregular agricultural parcels. The default aggregation---mean pooling---collapses each region to its average vector, discarding within-region variability that we show carries class signal.
 
 Pooling is well-studied in image retrieval---generalized mean (GeM)~\cite{radenovic2018gem}, VLAD~\cite{jegou2010vlad}, NetVLAD~\cite{arandjelovic2016netvlad}, Fisher Vectors~\cite{perronnin2010improving}---and in temporal audio modeling~\cite{miech2017learnable}, but remains largely unexplored for GFM embeddings over irregular-polygon regions. The key challenge specific to this setting is that $N$ varies by three orders of magnitude across region types and sizes. When $N < D$, the sample covariance matrix has fewer data points than parameters and is mathematically rank-deficient; even at $N \approx D$ its eigenvalues are unstable, so second-order statistics estimated from such regions are unreliable. When $N \gg D$, those same statistics are well-conditioned and outperform mean pooling by a large margin. No prior work characterizes this transition or gives practitioners a decision rule.
 
@@ -55,13 +62,6 @@ We study post-hoc pooling across the full $N/D$ spectrum. Using pixel embeddings
   \item \emph{EuroSAT-Embed} and \emph{PASTIS-Embed}: pre-computed pixel-level embeddings from three GFMs, released with all benchmark code, providing the first controlled study of post-hoc pooling for GFM embedding products (Sec.~\ref{sec:data}).
 \end{itemize}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=0.82\linewidth]{pipeline.pdf}
-  \caption{\textbf{Embedding pipeline for EuroSAT (top) and PASTIS (bottom).} In both settings, a GFM encodes every pixel independently and a pooling operator aggregates those pixel vectors into one patch or parcel representation. \emph{Top:} A $64{\times}64$ Sentinel-2 patch is encoded pixel-wise; all 4{,}096 pixel embeddings are pooled into a single patch vector for land-cover classification. \emph{Bottom:} Multi-temporal Sentinel-2 frames are encoded per-pixel; only pixels inside the parcel boundary (contour shown on a PCA pseudo-RGB visualization---first three principal components of the embedding rendered as colour) are pooled into a single parcel vector for crop-type classification. The number of pixels per parcel $N$ varies from 5 to 3{,}440, making the ratio $N/D$ a key design parameter.}
-  \label{fig:pipeline}
-\end{figure*}
-
 \section{Data and Embeddings}
 \label{sec:data}
 
@@ -69,7 +69,7 @@ We study post-hoc pooling across the full $N/D$ spectrum. Using pixel embeddings
 
 \textbf{PASTIS.} We use the PASTIS panoptic segmentation dataset~\cite{garnot2021panoptic}, which contains 2{,}433 Sentinel-2 time-series patches covering France with instance-level annotations of ${\sim}85{,}000$ agricultural parcels across 18 crop classes. Parcels are irregular polygons extracted from instance masks; parcel size varies from 5 to 3{,}440 pixels (median 196). We follow the official PASTIS train/test split using the folds released with the original paper (folds 1--4 train, fold 5 test). Parcels with fewer than 5 pixels are excluded.
 
-\textbf{EuroSAT-Embed.} We construct pixel-level embedding datasets from AlphaEarth~\cite{brown2025alphaearth} (AEF, 64-d int8), OlmoEarth-Nano~\cite{herzog2025olmoearth} (128-d float32, $T{=}12$ subsampled time steps), and Tessera~\cite{feng2025tesseratemporalembeddingssurface} (128-d float32). All three encoders ingest Sentinel-2 time series and emit a single annual per-pixel embedding; AEF and OlmoEarth additionally use patch spatial context. We apply the same three encoders to PASTIS parcels to produce \emph{PASTIS-Embed}. We study pooling behavior, not encoder comparison.
+\textbf{EuroSAT-Embed.} We construct pixel-level embedding datasets from AlphaEarth~\cite{brown2025alphaearth} (AEF, 64-d int8), OlmoEarth-Nano~\cite{herzog2025olmoearth} (128-d float32, $T{=}12$ subsampled time steps), and Tessera~\cite{feng2025tesseratemporalembeddingssurface} (128-d float32). All three products ultimately provide one embedding vector per output pixel. AEF and OlmoEarth take a time series of image patches and return a patch of pixel-aligned embeddings, so each output vector can reflect neighboring-pixel context; Tessera takes a time series for each pixel and returns a per-pixel embedding without adjacent-pixel context. We apply the same three encoders to PASTIS parcels to produce \emph{PASTIS-Embed}. We study pooling behavior, not encoder comparison.
 
 \section{Pooling Methods}
 
@@ -103,7 +103,7 @@ We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic 
   \label{fig:gap_chart}
 \end{figure}
 
-\textbf{When $N \approx D$: second-order statistics collapse.} On PASTIS (Table~\ref{tab:pastis}), \textit{covariance} drops from 91.0\% on EuroSAT to 58.7\% F1 on AEF---a 32\,pp collapse---because many parcels have $N < D$, making the sample covariance matrix rank-deficient. \textit{Stats} similarly underperforms. In contrast, \textit{mean+std} (avg.\ 56.4\%, best on OlmoEarth at 54.9\%, second-best on AEF at 65.5\%) and \textit{center-weighted mean} (avg.\ 56.3\%) remain robust by preserving first-order distributional structure without requiring stable second moments. First-order methods (\textit{mean}, \textit{center-weighted}) are now competitive, unlike on EuroSAT. Tessera's lower absolute scores across all methods (best: 49.4\%) reflect encoder-level differences in how temporal information is distilled; the pooling-method \emph{rankings}, however, follow the same $N/D$ trend as the other two encoders.
+\textbf{When $N \approx D$: PASTIS exposes the failure case.} EuroSAT makes covariance pooling look attractive because every labeled patch supplies thousands of pixels. PASTIS tests the opposite regime: labels are irregular parcels, many parcels have $N < D$, and the sample covariance matrix becomes rank-deficient. In this setting, \textit{covariance} falls from 89.1\% spatial accuracy on EuroSAT-AEF to 58.7\% F1 on PASTIS-AEF, and \textit{stats} similarly loses its EuroSAT advantage (Table~\ref{tab:pastis}). The practical lesson is not that PASTIS produces a large new accuracy win; rather, it shows where EuroSAT-derived pooling advice breaks. First-order summaries such as \textit{mean+std} (linear avg.\ 56.4\%), \textit{center-weighted mean} (56.3\%), and \textit{mean} (56.1\%) are numerically close and remain competitive because they preserve coarse distributional structure without requiring stable second moments. For kNN, \textit{mean} and \textit{center-weighted mean} are the strongest PASTIS choices, so our variable-region recommendation should be read as a conservative first-order family rather than a single universally dominant operator.
 
 \begin{figure*}[t]
   \centering
@@ -112,7 +112,7 @@ We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic 
   \label{fig:nd_transition}
 \end{figure*}
 
-\textbf{Region-size breakdown.} Fig.~\ref{fig:ranking_heatmap} ranks methods within four parcel-size bins averaged across all three embedding sources. For tiny parcels ($N{<}50$), \textit{center-weighted mean} leads (avg.\ rank 2.0), followed by \textit{mean+max} (3.0) and \textit{stats} (4.0). For small parcels ($50$--$150$\,px) \textit{center-weighted mean} again ranks first (2.0). For medium ($150$--$500$\,px) parcels \textit{mean+std} ranks first (2.67); for large ($>500$\,px) parcels \textit{mean+max} ranks first (1.67), with \textit{mean+std} third (3.67). \textit{Covariance} sits near the bottom for tiny and small bins (avg.\ rank ${>}11$) and recovers only to mid-pack (rank 8) in the large bin---it never leads at the parcel scale, consistent with $N/D$ remaining ${\lesssim}1$--$5$ even for the largest PASTIS parcels at $D{=}128$. \textit{Mean+std} is the only training-free method that stays in the top-3 for the small, medium, and large bins, making it the practical default for variable-size regions.
+\textbf{Region-size breakdown.} Fig.~\ref{fig:ranking_heatmap} ranks methods within four parcel-size bins averaged across all three embedding sources. For tiny parcels ($N{<}50$), \textit{center-weighted mean} leads (avg.\ rank 2.0), followed by \textit{mean+max} (3.0) and \textit{stats} (4.0). For small parcels ($50$--$150$\,px) \textit{center-weighted mean} again ranks first (2.0). For medium ($150$--$500$\,px) parcels \textit{mean+std} ranks first (2.67); for large ($>500$\,px) parcels \textit{mean+max} ranks first (1.67), with \textit{mean+std} third (3.67). \textit{Covariance} sits near the bottom for tiny and small bins (avg.\ rank ${>}11$) and recovers only to mid-pack (rank 8) in the large bin---it never leads at the parcel scale, consistent with $N/D$ remaining ${\lesssim}1$--$5$ even for the largest PASTIS parcels at $D{=}128$. \textit{Mean+std} is the only training-free method that stays in the top-3 for the small, medium, and large bins, making it the practical default for linear probes on variable-size regions; for similarity search, \textit{mean} and \textit{center-weighted mean} remain competitive defaults.
 
 \begin{figure}[!ht]
   \centering
@@ -120,11 +120,6 @@ We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic 
   \caption{\textbf{Method rankings shift as parcel size grows.} Each cell shows the average rank across AEF, OlmoEarth, and Tessera within each parcel-size bin---darker blue is a better rank (1=best). Center-weighted mean and mean+max dominate the tiny bin; mean+std rises as parcels grow; covariance moves from near-bottom (tiny/small) to mid-pack (large) but never leads at the parcel scale, since $N/D$ remains modest. Mean+std ($\bigstar$, highlighted in orange) is the only training-free method that stays in the top~3 for the small, medium, and large bins. The dashed vertical line separates per-bin results from the overall ranking.}
   \label{fig:ranking_heatmap}
 \end{figure}
-
-
-\subsection{PASTIS Crop Classification}
-
-Fig.~\ref{fig:ranking_heatmap} summarizes the per-bin ranking. AEF achieves the highest overall F1 because its $D{=}64$ gives a more favorable $N/D$ ratio at small parcel sizes than OlmoEarth or Tessera ($D{=}128$). This is consistent with the $N/D$ prediction: AEF's smaller embedding space makes second-order statistics viable at smaller parcel sizes.
 
 \section{Discussion}
 

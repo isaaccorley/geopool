@@ -4,6 +4,7 @@
 
 [![Paper](https://img.shields.io/badge/Paper-PDF-red)](paper/iclr2026_conference.pdf)
 [![Dataset](https://img.shields.io/badge/🤗%20HuggingFace-EuroSAT--Embed-blue)](https://huggingface.co/datasets/isaaccorley/eurosat-embed)
+[![Dataset](https://img.shields.io/badge/🤗%20HuggingFace-PASTIS--Embed-blue)](https://huggingface.co/datasets/isaaccorley/pastis-embed)
 [![License](https://img.shields.io/badge/License-CC--BY--4.0-green)](LICENSE)
 
 Benchmark for evaluating pixel-to-patch pooling methods on geospatial foundation model embeddings.
@@ -98,7 +99,9 @@ uv sync --dev --group download
 
 ## 📦 Datasets
 
-The dense pixel embedding variants of EuroSAT and pooled versions are on [HuggingFace](https://huggingface.co/datasets/isaaccorley/eurosat-embed).
+The dense pixel embedding variants and pooled versions are on HuggingFace:
+[EuroSAT-Embed](https://huggingface.co/datasets/isaaccorley/eurosat-embed) and
+[PASTIS-Embed](https://huggingface.co/datasets/isaaccorley/pastis-embed).
 
 ```bash
 # pooled embeddings
@@ -110,6 +113,16 @@ wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/embeddings-te
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-aef.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-olmoearth-nano.tar.gz
 wget https://hf.co/datasets/isaaccorley/eurosat-embed/resolve/main/eurosat-tessera.tar.gz
+
+# PASTIS pooled embeddings
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/embeddings-aef-pooled.tar.gz
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/embeddings-olmoearth-pooled.tar.gz
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/embeddings-tessera-pooled.tar.gz
+
+# PASTIS pixel embeddings
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/pastis-aef.tar.gz
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/pastis-olmoearth.tar.gz
+wget https://hf.co/datasets/isaaccorley/pastis-embed/resolve/main/pastis-tessera.tar.gz
 ```
 
 ## 🧪 Evaluation
