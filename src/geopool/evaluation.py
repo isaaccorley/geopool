@@ -6,6 +6,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
+
 C_GRID = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
 
 
@@ -101,6 +102,52 @@ def evaluate_knn(
     return {"metrics": metrics, "y_pred": y_pred}
 
 
+def evaluate_knn_faiss(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    k: int = 5,
+    use_gpu: bool = True,
+) -> dict[str, np.ndarray | dict[str, float]]:
+    """KNN via FAISS with cosine similarity (inner-product on L2-normalised vectors).
+
+    Uses GPU index when `use_gpu=True` and a GPU is available, falls back to CPU.
+    """
+    import faiss
+
+    X_train = sanitize_features(X_train, "KNN X_train").astype(np.float32, copy=False)
+    X_test = sanitize_features(X_test, "KNN X_test").astype(np.float32, copy=False)
+
+    # L2-normalise for cosine via inner product
+    faiss.normalize_L2(X_train)
+    faiss.normalize_L2(X_test)
+
+    D = X_train.shape[1]
+    index_cpu = faiss.IndexFlatIP(D)  # inner product == cosine after L2-norm
+
+    n_gpus = faiss.get_num_gpus()
+    if use_gpu and n_gpus > 0:
+        res = faiss.StandardGpuResources()
+        index = faiss.index_cpu_to_gpu(res, 0, index_cpu)
+    else:
+        index = index_cpu
+
+    index.add(X_train)
+    _, indices = index.search(X_test, k)  # (N_test, k)
+
+    # Majority vote
+    neighbor_labels = y_train[indices]  # (N_test, k)
+    y_pred = np.array([
+        np.bincount(row, minlength=int(y_train.max()) + 1).argmax()
+        for row in neighbor_labels
+    ])
+
+    metrics = compute_metrics(y_test, y_pred)
+    metrics["k"] = k
+    return {"metrics": metrics, "y_pred": y_pred}
+
+
 def evaluate_linear(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -147,6 +194,103 @@ def evaluate_linear(
 
     metrics = compute_metrics(y_test, y_pred)
     metrics["C"] = chosen_c
+    return {"metrics": metrics, "y_pred": y_pred}
+
+
+def evaluate_linear_gpu(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    C_grid: list[float] | None = None,
+    max_iter: int = 200,
+    val_fraction: float = 0.15,
+    seed: int = 42,
+) -> dict[str, np.ndarray | dict[str, float]]:
+    """GPU logistic regression via PyTorch L-BFGS with C grid search.
+
+    Standardises features, holds out `val_fraction` of train to pick C, then
+    refits on the full train set with the chosen C.  Falls back to CPU sklearn
+    when CUDA is unavailable.
+    """
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F  # noqa: N812
+
+    if C_grid is None:
+        C_grid = C_GRID
+
+    if not torch.cuda.is_available():
+        return evaluate_linear(X_train, y_train, X_test, y_test, C=C_grid)
+
+    X_train = sanitize_features(X_train, "Linear X_train").astype(np.float32)
+    X_test = sanitize_features(X_test, "Linear X_test").astype(np.float32)
+
+    # Standardise on full train
+    mean = X_train.mean(axis=0)
+    std = X_train.std(axis=0) + 1e-8
+    X_train_s = (X_train - mean) / std
+    X_test_s = (X_test - mean) / std
+
+    # Remap labels to contiguous 0-indexed ints
+    classes = np.unique(y_train)
+    label_to_idx = {c: i for i, c in enumerate(classes)}
+    idx_to_label = {i: c for c, i in label_to_idx.items()}
+    y_tr_full = np.vectorize(label_to_idx.get)(y_train).astype(np.int64)
+    y_te = np.vectorize(label_to_idx.get)(y_test).astype(np.int64)
+    n_classes = len(classes)
+    D = X_train_s.shape[1]
+
+    dev = torch.device("cuda")
+
+    # Stratified val split for C selection
+    rng = np.random.default_rng(seed)
+    n_val = int(len(X_train_s) * val_fraction)
+    perm = rng.permutation(len(X_train_s))
+    val_idx, tr_idx = perm[:n_val], perm[n_val:]
+    X_tr_np, y_tr_np = X_train_s[tr_idx], y_tr_full[tr_idx]
+    X_val_np, y_val_np = X_train_s[val_idx], y_tr_full[val_idx]
+
+    def _fit(X_np: np.ndarray, y_np: np.ndarray, C: float) -> nn.Linear:
+        X_t = torch.from_numpy(X_np).to(dev)
+        y_t = torch.from_numpy(y_np).to(dev)
+        model = nn.Linear(D, n_classes, bias=True).to(dev)
+        nn.init.zeros_(model.weight)
+        nn.init.zeros_(model.bias)
+        # L2 reg: weight_decay = 1/(C * N) matches sklearn's C convention
+        wd = 1.0 / (C * len(X_np))
+        opt = torch.optim.LBFGS(
+            model.parameters(), max_iter=max_iter,
+            tolerance_grad=1e-6, line_search_fn="strong_wolfe",
+        )
+        def closure() -> torch.Tensor:
+            opt.zero_grad()
+            loss = F.cross_entropy(model(X_t), y_t)
+            l2 = sum(p.pow(2).sum() for p in model.parameters())
+            (loss + wd * l2).backward()
+            return loss
+        opt.step(closure)
+        return model
+
+    def _predict(model: nn.Linear, X_np: np.ndarray) -> np.ndarray:
+        with torch.no_grad():
+            return model(torch.from_numpy(X_np).to(dev)).argmax(1).cpu().numpy()
+
+    # Grid search C on val set
+    best_C, best_val_acc = C_grid[0], -1.0
+    for C in C_grid:
+        model = _fit(X_tr_np, y_tr_np, C)
+        val_acc = (_predict(model, X_val_np) == y_val_np).mean()
+        if val_acc > best_val_acc:
+            best_val_acc, best_C = val_acc, C
+
+    # Refit on full train with best C
+    model = _fit(X_train_s, y_tr_full, best_C)
+    y_pred_idx = _predict(model, X_test_s)
+    y_pred = np.vectorize(idx_to_label.get)(y_pred_idx)
+
+    metrics = compute_metrics(y_test, y_pred)
+    metrics["C"] = best_C
     return {"metrics": metrics, "y_pred": y_pred}
 
 

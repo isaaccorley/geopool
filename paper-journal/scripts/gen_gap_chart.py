@@ -15,7 +15,6 @@ METHOD_NAMES = {
     "stats":                    "Stats",
     "max":                      "Max",
     "gem":                      "GeM",
-    "signed_non_cancelling_gem":"Signed NC-GeM",
     "mean_max":                 "Mean+Max",
     "percentiles":              "Percentiles",
     "center_weighted_mean":     "Center-Weighted",
@@ -38,7 +37,6 @@ FAMILY_COLOR = {
     "Center-Weighted": "#F39C12",
     "Median+IQR": "#E67E22",
     "Covariance": "#9B59B6",
-    "Signed NC-GeM": "#3498DB",
     "PCA-64": "#BDC3C7",
     "BoVW-128": "#BDC3C7",
 }
@@ -90,10 +88,10 @@ ax1.spines[["top", "right"]].set_visible(False)
 ax1.set_xlim(0, gaps.max() * 100 * 1.18)
 ax1.grid(axis="x", alpha=0.2, lw=0.6)
 
-# Highlight Signed NC-GeM
-if "Signed NC-GeM" in methods:
-    idx = methods.index("Signed NC-GeM")
-    ax1.get_yticklabels()[idx].set_color("#3498DB")
+# Highlight Mean+Std (recommended)
+if "Mean+Std" in methods:
+    idx = methods.index("Mean+Std")
+    ax1.get_yticklabels()[idx].set_color("#2ECC71")
     ax1.get_yticklabels()[idx].set_fontweight("bold")
 
 # ── Right: spatial accuracy scatter (method vs spatial acc) ───────────────
@@ -102,7 +100,7 @@ ax2.scatter(piv["gap"] * 100, piv["spatial_acc"] * 100,
             s=80, edgecolors="white", linewidths=0.8, zorder=3)
 
 # Label key methods
-label_methods = {"Mean", "Stats", "Covariance", "Signed NC-GeM", "Mean+Std"}
+label_methods = {"Mean", "Stats", "Covariance", "Mean+Std", "Center-Weighted"}
 for method, row in piv.iterrows():
     if method in label_methods:
         offset = (0.15, 0.3)

@@ -194,6 +194,96 @@ def pool_flattened_covariance(emb: np.ndarray) -> np.ndarray:
     raise ValueError(f"need 3D or 4D, got {emb.ndim}D")
 
 
+def pool_signed_sqrt_mean(emb: np.ndarray) -> np.ndarray:
+    """Power-normalized mean: sign(x)*sqrt(|x|) per pixel, then mean. D-dim."""
+    ax = _spatial_axes(emb)
+    normed = np.sign(emb) * np.sqrt(np.abs(emb))
+    return normed.mean(axis=ax)
+
+
+def pool_trimmed_mean(emb: np.ndarray, trim: float = 0.1) -> np.ndarray:
+    """Trimmed mean: drop top/bottom trim fraction per channel, then mean. D-dim."""
+    ax = _spatial_axes(emb)
+    if emb.ndim == 3:
+        H, W, D = emb.shape
+        flat = emb.reshape(H * W, D)
+        lo = np.percentile(flat, trim * 100, axis=0)
+        hi = np.percentile(flat, (1 - trim) * 100, axis=0)
+        clipped = np.clip(flat, lo, hi)
+        return clipped.mean(axis=0)
+    if emb.ndim == 4:
+        N, H, W, D = emb.shape
+        flat = emb.reshape(N, H * W, D)
+        lo = np.percentile(flat, trim * 100, axis=1)
+        hi = np.percentile(flat, (1 - trim) * 100, axis=1)
+        clipped = np.clip(flat, lo[:, None, :], hi[:, None, :])
+        return clipped.mean(axis=1)
+    raise ValueError(f"need 3D or 4D, got {emb.ndim}D")
+
+
+def pool_nd_switch(emb: np.ndarray) -> np.ndarray:
+    """Use mean+std when N<D, signed NC-GeM when N>=D. Always 2D output."""
+    if emb.ndim == 3:
+        H, W, D = emb.shape
+        N = H * W
+        if N < D:
+            return pool_mean_std(emb)
+        return pool_signed_non_cancelling_gem(emb)
+    if emb.ndim == 4:
+        return np.stack([pool_nd_switch(emb[i]) for i in range(emb.shape[0])])
+    raise ValueError(f"need 3D or 4D, got {emb.ndim}D")
+
+
+def pool_sign_adaptive_nc_gem(emb: np.ndarray, p: float = 3.0, eps: float = 1e-6) -> np.ndarray:
+    """Signed NC-GeM when N>=D; GeM+std when N<D. Always 2D output."""
+    if emb.ndim == 3:
+        H, W, D = emb.shape
+        N = H * W
+        if N >= D:
+            return pool_signed_non_cancelling_gem(emb, p=p, eps=eps)
+        flat = emb.reshape(N, D).astype(np.float64)
+        gem = np.mean(np.abs(flat) ** p, axis=0) ** (1.0 / p)
+        std = flat.std(axis=0)
+        return np.concatenate([gem, std]).astype(np.float32)
+    if emb.ndim == 4:
+        return np.stack([pool_sign_adaptive_nc_gem(emb[i], p=p, eps=eps) for i in range(emb.shape[0])])
+    raise ValueError(f"need 3D or 4D, got {emb.ndim}D")
+
+
+class WhitenedMeanPooler:
+    """ZCA-whitened mean pooling.
+
+    Fits IncrementalPCA (whiten=True) on training pixels; for each patch/parcel
+    transforms pixels to whitened space then takes the mean. Output: n_components-dim
+    (defaults to input D, same dimensionality as plain mean).
+    """
+
+    def __init__(self, n_components: int | None = None, batch_size: int = 10_000) -> None:
+        from sklearn.decomposition import IncrementalPCA
+        self.n_components = n_components
+        self.batch_size = batch_size
+        self._pca: IncrementalPCA | None = None
+        self._fitted = False
+
+    def partial_fit(self, flat: np.ndarray) -> None:
+        from sklearn.decomposition import IncrementalPCA
+        if self._pca is None:
+            nc = self.n_components or flat.shape[1]
+            self._pca = IncrementalPCA(n_components=nc, whiten=True)
+        nc = self._pca.n_components
+        for start in range(0, flat.shape[0], self.batch_size):
+            chunk = flat[start : start + self.batch_size].astype(np.float64)
+            if chunk.shape[0] < nc:
+                continue  # too few samples for this chunk; caller should send larger batches
+            self._pca.partial_fit(chunk)
+
+    def transform_parcel(self, px: np.ndarray) -> np.ndarray:
+        if not self._fitted or self._pca is None:
+            raise RuntimeError("WhitenedMeanPooler must be fit before transform")
+        whitened = self._pca.transform(px.astype(np.float64))
+        return whitened.mean(axis=0).astype(np.float32)
+
+
 class PCAPooler:
     """Flatten patch to vector, reduce with PCA."""
 
@@ -326,6 +416,54 @@ class BoVWPooler:
         return self.transform(X)
 
 
+class VLADPooler:
+    """Vector of Locally Aggregated Descriptors (Jégou et al., 2010).
+
+    Fits k cluster centers on train pixels; encodes each parcel as the
+    sum of per-cluster residuals (pixel - center), intra-L2-normalized,
+    then globally L2-normalized. Output dim = k * D.
+    """
+
+    def __init__(self, n_clusters: int = 16, random_state: int = 42, batch_size: int = 10_000) -> None:
+        self.n_clusters = n_clusters
+        self.batch_size = batch_size
+        self.kmeans = MiniBatchKMeans(
+            n_clusters=n_clusters,
+            random_state=random_state,
+            batch_size=batch_size,
+            n_init="auto",
+        )
+        self._fitted = False
+
+    def _encode_flat(self, flat: np.ndarray) -> np.ndarray:
+        """Encode N×D pixel array → k*D VLAD descriptor."""
+        flat = flat.astype(np.float32)
+        labels = self.kmeans.predict(flat)
+        centers = self.kmeans.cluster_centers_.astype(np.float32)
+        D = flat.shape[1]
+        vlad = np.zeros((self.n_clusters, D), dtype=np.float32)
+        for k in range(self.n_clusters):
+            mask = labels == k
+            if mask.any():
+                vlad[k] = (flat[mask] - centers[k]).sum(axis=0)
+        # intra-normalization
+        norms = np.linalg.norm(vlad, axis=1, keepdims=True)
+        vlad = vlad / np.where(norms > 0, norms, 1.0)
+        # global L2
+        out = vlad.ravel()
+        n = np.linalg.norm(out)
+        return out / max(n, 1e-8)
+
+    def partial_fit(self, flat: np.ndarray) -> None:
+        for start in range(0, flat.shape[0], self.batch_size):
+            self.kmeans.partial_fit(flat[start : start + self.batch_size])
+
+    def transform_parcel(self, px: np.ndarray) -> np.ndarray:
+        if not self._fitted:
+            raise RuntimeError("VLADPooler must be fit before transform")
+        return self._encode_flat(px.astype(np.float32))
+
+
 POOL_METHODS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
     "mean": pool_mean,
     "std": pool_std,
@@ -340,18 +478,24 @@ POOL_METHODS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
     "center_weighted_mean": pool_center_weighted_mean,
     "median_iqr": pool_median_iqr,
     "flattened_cov": pool_flattened_covariance,
+    "signed_sqrt_mean": pool_signed_sqrt_mean,
+    "trimmed_mean": pool_trimmed_mean,
+    "nd_switch": pool_nd_switch,
+    "sign_adaptive_nc_gem": pool_sign_adaptive_nc_gem,
 }
 
 PCA_VARIANTS = {"pca_64": 64}
 BOVW_VARIANTS = {"bovw_128": 128}
-FITTED_METHODS = list(PCA_VARIANTS.keys()) + list(BOVW_VARIANTS.keys())
+VLAD_VARIANTS = {"vlad_16": 16, "vlad_32": 32}
+WHITENED_MEAN_VARIANTS: dict[str, None] = {"whitened_mean": None}
+FITTED_METHODS = list(PCA_VARIANTS.keys()) + list(BOVW_VARIANTS.keys()) + list(VLAD_VARIANTS.keys()) + list(WHITENED_MEAN_VARIANTS.keys())
 ALL_METHODS = list(POOL_METHODS.keys()) + FITTED_METHODS
 
 
 def get_output_dim(method: str, input_dim: int = 64) -> int:
-    if method in {"mean", "std", "max", "gem", "center_weighted_mean"}:
+    if method in {"mean", "std", "max", "gem", "center_weighted_mean", "signed_sqrt_mean", "trimmed_mean", "whitened_mean"}:
         return input_dim
-    if method in {"signed_non_cancelling_gem", "adaptive_nc_gem"}:
+    if method in {"signed_non_cancelling_gem", "adaptive_nc_gem", "nd_switch", "sign_adaptive_nc_gem"}:
         return 2 * input_dim
     if method == "mean_std":
         return 2 * input_dim
@@ -365,6 +509,10 @@ def get_output_dim(method: str, input_dim: int = 64) -> int:
         return 2 * input_dim
     if method == "flattened_cov":
         return input_dim * (input_dim + 1) // 2
-    if method.startswith(("pca_", "bovw_")):
+    if method.startswith("pca_"):
         return int(method.split("_")[1])
+    if method.startswith("bovw_"):
+        return int(method.split("_")[1])
+    if method.startswith("vlad_"):
+        return int(method.split("_")[1]) * input_dim
     raise ValueError(f"unknown method: {method}")

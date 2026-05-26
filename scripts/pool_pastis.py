@@ -25,7 +25,7 @@ import rasterio
 from sklearn.decomposition import IncrementalPCA
 from tqdm import tqdm
 
-from geopool.pool import BOVW_VARIANTS, POOL_METHODS, PCA_VARIANTS, BoVWPooler
+from geopool.pool import BOVW_VARIANTS, POOL_METHODS, PCA_VARIANTS, VLAD_VARIANTS, WHITENED_MEAN_VARIANTS, BoVWPooler, VLADPooler, WhitenedMeanPooler
 
 # ── PASTIS label constants ────────────────────────────────────────────────────
 BACKGROUND = 0
@@ -135,6 +135,38 @@ def _parcel_flattened_cov(px: np.ndarray) -> np.ndarray:
     return cov[np.triu_indices(px.shape[1])].astype(np.float32)
 
 
+def _parcel_nd_switch(px: np.ndarray) -> np.ndarray:
+    """mean+std when N<D, signed NC-GeM when N>=D."""
+    N, D = px.shape
+    if N < D:
+        return _parcel_mean_std(px)
+    return _parcel_signed_non_cancelling_gem(px)
+
+
+def _parcel_sign_adaptive_nc_gem(px: np.ndarray, p: float = 3.0, eps: float = 1e-6) -> np.ndarray:
+    """Signed NC-GeM when N>=D; GeM+std when N<D."""
+    N, D = px.shape
+    if N >= D:
+        return _parcel_signed_non_cancelling_gem(px, p=p, eps=eps)
+    px64 = px.astype(np.float64)
+    gem = np.mean(np.abs(px64) ** p, axis=0) ** (1.0 / p)
+    std = px64.std(axis=0)
+    return np.concatenate([gem, std]).astype(np.float32)
+
+
+def _parcel_signed_sqrt_mean(px: np.ndarray) -> np.ndarray:
+    normed = np.sign(px) * np.sqrt(np.abs(px))
+    return normed.mean(axis=0).astype(np.float32)
+
+
+def _parcel_trimmed_mean(px: np.ndarray, trim: float = 0.1) -> np.ndarray:
+    lo = np.percentile(px, trim * 100, axis=0)
+    hi = np.percentile(px, (1 - trim) * 100, axis=0)
+    clipped = np.clip(px, lo, hi)
+    return clipped.mean(axis=0).astype(np.float32)
+
+
+
 PARCEL_POOL_FNS = {
     "mean": _parcel_mean,
     "std": _parcel_std,
@@ -149,6 +181,10 @@ PARCEL_POOL_FNS = {
     "center_weighted_mean": _parcel_center_weighted_mean,
     "median_iqr": _parcel_median_iqr,
     "flattened_cov": _parcel_flattened_cov,
+    "nd_switch": _parcel_nd_switch,
+    "sign_adaptive_nc_gem": _parcel_sign_adaptive_nc_gem,
+    "signed_sqrt_mean": _parcel_signed_sqrt_mean,
+    "trimmed_mean": _parcel_trimmed_mean,
 }
 
 
@@ -346,6 +382,98 @@ def compute_bovw_pools(
         print(f"    {method}: train={x_train.shape}, test={x_test.shape} -> {out}")
 
 
+def compute_vlad_pools(
+    train_parcels: list[tuple[int, np.ndarray, int]],
+    test_parcels: list[tuple[int, np.ndarray, int]],
+    output_dir: Path,
+    methods: list[str],
+    bovw_batch_size: int = 10_000,
+    overwrite: bool = False,
+) -> None:
+    methods_todo = [m for m in methods if m in VLAD_VARIANTS]
+    methods_todo = [m for m in methods_todo if overwrite or not (output_dir / m / "pastis.npz").exists()]
+    if not methods_todo:
+        return
+
+    y_train = np.array([cls for cls, _, _ in train_parcels], dtype=np.int32)
+    y_test = np.array([cls for cls, _, _ in test_parcels], dtype=np.int32)
+    n_pixels_train = np.array([n for _, _, n in train_parcels], dtype=np.int32)
+    n_pixels_test = np.array([n for _, _, n in test_parcels], dtype=np.int32)
+
+    for method in methods_todo:
+        n_clusters = VLAD_VARIANTS[method]
+        print(f"  Fitting VLAD({n_clusters}) on train pixels (streaming)...")
+        vlad = VLADPooler(n_clusters=n_clusters, batch_size=bovw_batch_size)
+
+        batch: list[np.ndarray] = []
+        batch_pixels = 0
+        for _, px, _ in tqdm(train_parcels, desc="vlad fit", leave=False):
+            batch.append(px.astype(np.float32))
+            batch_pixels += len(px)
+            if batch_pixels >= bovw_batch_size:
+                flat = np.concatenate(batch, axis=0)
+                vlad.partial_fit(flat[np.random.permutation(len(flat))])
+                batch = []
+                batch_pixels = 0
+        if batch:
+            flat = np.concatenate(batch, axis=0)
+            vlad.partial_fit(flat)
+        vlad._fitted = True  # noqa: SLF001
+
+        x_train = np.stack([vlad.transform_parcel(px) for _, px, _ in tqdm(train_parcels, desc="vlad train", leave=False)])
+        x_test = np.stack([vlad.transform_parcel(px) for _, px, _ in tqdm(test_parcels, desc="vlad test", leave=False)])
+        out = output_dir / method / "pastis.npz"
+        save_npz(out, x_train, y_train, x_test, y_test, n_pixels_train, n_pixels_test)
+        print(f"    {method}: train={x_train.shape}, test={x_test.shape} -> {out}")
+
+
+def compute_whitened_mean_pools(
+    train_parcels: list[tuple[int, np.ndarray, int]],
+    test_parcels: list[tuple[int, np.ndarray, int]],
+    output_dir: Path,
+    methods: list[str],
+    batch_size: int = 10_000,
+    overwrite: bool = False,
+) -> None:
+    methods_todo = [m for m in methods if m in WHITENED_MEAN_VARIANTS]
+    methods_todo = [m for m in methods_todo if overwrite or not (output_dir / m / "pastis.npz").exists()]
+    if not methods_todo:
+        return
+
+    y_train = np.array([cls for cls, _, _ in train_parcels], dtype=np.int32)
+    y_test = np.array([cls for cls, _, _ in test_parcels], dtype=np.int32)
+    n_pixels_train = np.array([n for _, _, n in train_parcels], dtype=np.int32)
+    n_pixels_test = np.array([n for _, _, n in test_parcels], dtype=np.int32)
+
+    for method in methods_todo:
+        print(f"  Fitting WhitenedMean on train pixels (streaming)...")
+        D = train_parcels[0][1].shape[1]
+        min_batch = max(batch_size, D + 1)
+        pooler = WhitenedMeanPooler(batch_size=min_batch)
+
+        batch: list[np.ndarray] = []
+        batch_pixels = 0
+        for _, px, _ in tqdm(train_parcels, desc="whitened fit", leave=False):
+            batch.append(px.astype(np.float32))
+            batch_pixels += len(px)
+            if batch_pixels >= min_batch:
+                flat = np.concatenate(batch, axis=0)
+                pooler.partial_fit(flat[np.random.permutation(len(flat))])
+                batch = []
+                batch_pixels = 0
+        if batch:
+            flat = np.concatenate(batch, axis=0)
+            if flat.shape[0] >= D + 1:
+                pooler.partial_fit(flat)
+        pooler._fitted = True  # noqa: SLF001
+
+        x_train = np.stack([pooler.transform_parcel(px) for _, px, _ in tqdm(train_parcels, desc="whitened train", leave=False)])
+        x_test = np.stack([pooler.transform_parcel(px) for _, px, _ in tqdm(test_parcels, desc="whitened test", leave=False)])
+        out = output_dir / method / "pastis.npz"
+        save_npz(out, x_train, y_train, x_test, y_test, n_pixels_train, n_pixels_test)
+        print(f"    {method}: train={x_train.shape}, test={x_test.shape} -> {out}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pool PASTIS parcel embeddings by instance mask")
     parser.add_argument("--dataset-name", required=True, help="e.g. aef or tessera")
@@ -368,7 +496,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.methods is None:
-        methods = list(PARCEL_POOL_FNS.keys()) + list(PCA_VARIANTS.keys()) + list(BOVW_VARIANTS.keys())
+        methods = list(PARCEL_POOL_FNS.keys()) + list(PCA_VARIANTS.keys()) + list(BOVW_VARIANTS.keys()) + list(VLAD_VARIANTS.keys()) + list(WHITENED_MEAN_VARIANTS.keys())
     else:
         methods = args.methods
 
@@ -429,6 +557,18 @@ def main() -> None:
     if bovw_methods:
         print(f"\nComputing BoVW pool methods: {bovw_methods}")
         compute_bovw_pools(train_parcels, test_parcels, output_dir, bovw_methods, args.bovw_batch_size, args.overwrite)
+
+    # ── VLAD pools ─────────────────────────────────────────────────────────
+    vlad_methods = [m for m in methods if m in VLAD_VARIANTS]
+    if vlad_methods:
+        print(f"\nComputing VLAD pool methods: {vlad_methods}")
+        compute_vlad_pools(train_parcels, test_parcels, output_dir, vlad_methods, args.bovw_batch_size, args.overwrite)
+
+    # ── Whitened mean pools ────────────────────────────────────────────────
+    wm_methods = [m for m in methods if m in WHITENED_MEAN_VARIANTS]
+    if wm_methods:
+        print(f"\nComputing whitened mean pool methods: {wm_methods}")
+        compute_whitened_mean_pools(train_parcels, test_parcels, output_dir, wm_methods, args.bovw_batch_size, args.overwrite)
 
     # ── Summary ────────────────────────────────────────────────────────────
     print(f"\nDone. Output: {output_dir}")

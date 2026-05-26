@@ -33,8 +33,8 @@ D = {"aef": 64, "olmoearth": 128, "tessera": 128}
 # Key methods to plot (pick 4-5 with diverging stories)
 METHODS = {
     "mean":                    {"label": "Mean",            "color": "#7f7f7f", "ls": "--",  "lw": 1.8},
-    "mean_std":                {"label": "Mean+Std",        "color": "#2ECC71", "ls": "-.",  "lw": 2.0},
-    "signed_non_cancelling_gem":{"label": "Signed NC-GeM",  "color": "#3498DB", "ls": "-",   "lw": 2.8},
+    "mean_std":                {"label": "Mean+Std",        "color": "#2ECC71", "ls": "-",   "lw": 2.8},
+    "center_weighted_mean":    {"label": "Center-Weighted", "color": "#3498DB", "ls": "-.",  "lw": 2.0},
     "stats":                   {"label": "Stats",           "color": "#E74C3C", "ls": "-",   "lw": 2.0},
     "flattened_cov":           {"label": "Covariance",      "color": "#9B59B6", "ls": ":",   "lw": 2.2},
 }

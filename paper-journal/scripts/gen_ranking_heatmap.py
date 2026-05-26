@@ -19,11 +19,10 @@ BIN_LABELS = ["Tiny\n< 50 px", "Small\n50–150 px", "Medium\n150–500 px", "La
 METHOD_NAMES = {
     "mean":                     "Mean",
     "std":                      "Std",
-    "mean_std":                 "Mean+Std",
+    "mean_std":                 "Mean+Std ★",
     "stats":                    "Stats",
     "max":                      "Max",
     "gem":                      "GeM",
-    "signed_non_cancelling_gem":"Signed NC-GeM ★",
     "mean_max":                 "Mean+Max",
     "percentiles":              "Percentiles",
     "center_weighted_mean":     "Center-Weighted",
@@ -33,7 +32,9 @@ METHOD_NAMES = {
     "bovw_128":                 "BoVW-128",
 }
 
-# Compute avg rank across datasets for each (method, bin)
+# Compute avg rank across datasets for each (method, bin).
+# Restrict to the paper's 13 methods before ranking so ranks match the prose.
+df = df[df.method.isin(METHOD_NAMES.keys())].copy()
 rows = []
 for ds in ["aef", "olmoearth", "tessera"]:
     dds = df[df.dataset == ds].copy()
@@ -54,24 +55,23 @@ pivot = pivot.sort_values("overall")
 n_methods = len(pivot)
 n_bins = len(BIN_ORDER)
 
-fig, ax = plt.subplots(figsize=(8, 5.5))
+fig, ax = plt.subplots(figsize=(6.5, 4.0))
 
-# Custom colormap: green (rank 1) → white → red (rank last)
-cmap = mcolors.LinearSegmentedColormap.from_list(
-    "rank_cmap", ["#27AE60", "#F9F9F9", "#E74C3C"])
+# Sequential colorblind-safe colormap: rank 1 (best) = dark navy, last = pale.
+cmap = plt.cm.Blues_r
 
 # Draw heatmap
 data = pivot.values.astype(float)
 vmin, vmax = 1, n_methods
 im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, aspect="auto")
 
-# Annotate cells
+# Annotate cells (white text on dark blue, dark text on light blue)
 for i in range(n_methods):
     for j in range(n_bins):
         val = data[i, j]
-        # White text on dark cells
-        brightness = 1 - (val - vmin) / (vmax - vmin)
-        color = "white" if brightness < 0.45 or brightness > 0.85 else "#333333"
+        # Normalized intensity: 0 = darkest (best rank), 1 = lightest (worst)
+        norm = (val - vmin) / (vmax - vmin)
+        color = "white" if norm < 0.45 else "#222222"
         weight = "bold" if val <= 2 else "normal"
         ax.text(j, i, f"{val:.1f}", ha="center", va="center",
                 fontsize=8.5, color=color, fontweight=weight)
@@ -89,10 +89,10 @@ cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
 cbar.set_label("Avg rank", fontsize=8)
 cbar.ax.invert_yaxis()
 
-# Highlight Signed NC-GeM row
-sgem_idx = list(pivot.index).index("Signed NC-GeM ★")
-ax.add_patch(plt.Rectangle((-0.5, sgem_idx - 0.5), n_bins, 1,
-             fill=False, edgecolor="#3498DB", lw=2.5, zorder=5))
+# Highlight recommended row (Mean+Std) — orange high-contrast vs. blue cmap
+hi_idx = list(pivot.index).index("Mean+Std ★")
+ax.add_patch(plt.Rectangle((-0.5, hi_idx - 0.5), n_bins, 1,
+             fill=False, edgecolor="#E67E22", lw=2.5, zorder=5))
 
 # Divider between training-free and parametric (pca, bovw are last)
 fitted_start = list(pivot.index).index("PCA-64") if "PCA-64" in pivot.index else None

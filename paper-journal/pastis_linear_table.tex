@@ -1,0 +1,27 @@
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Linear probe F1-macro on PASTIS-R (18 crop classes, fold~5 test set). Cell shading indicates higher F1 within each column (darker = higher). Best per column in \textbf{bold} and second-best in \textit{italics}. $^*$OlmoEarth-Nano; T\,=\,12 subsampled time steps.}\label{tab:pastis_linear}
+  \begin{tabular}{lcccc}
+    \toprule
+    Pooling & AEF & OlmoEarth$^*$ & Tessera & Avg \\
+    \midrule
+    Mean           & \cellperf{56}{0.645} & \cellperf{57}{0.547} & \cellperf{41}{0.490} & \cellperf{57}{0.561} \\
+    Std            & \cellperf{15}{0.490} & \cellperf{15}{0.228} & \cellperf{15}{0.403} & \cellperf{15}{0.374} \\
+    GeM            & \cellperf{38}{0.628} & \cellperf{44}{0.497} & \cellperf{37}{0.481} & \cellperf{40}{0.535} \\
+    Signed NC-GeM  & \cellperf{60}{\textbf{0.664}} & \cellperf{34}{0.521} & \cellperf{41}{\textit{0.490}} & \cellperf{60}{\textbf{0.558}} \\
+    Center-Weighted & \cellperf{54}{0.653} & \cellperf{58}{\textit{0.548}} & \cellperf{40}{0.489} & \cellperf{57}{0.563} \\
+    Max            & \cellperf{25}{0.574} & \cellperf{15}{0.388} & \cellperf{34}{0.455} & \cellperf{22}{0.472} \\
+    Mean+Std       & \cellperf{57}{\textit{0.655}} & \cellperf{60}{\textbf{0.549}} & \cellperf{38}{0.487} & \cellperf{58}{\textit{0.564}} \\
+    Mean+Max       & \cellperf{54}{0.650} & \cellperf{55}{0.544} & \cellperf{39}{0.488} & \cellperf{57}{0.561} \\
+    Percentiles    & \cellperf{54}{0.653} & \cellperf{35}{0.524} & \cellperf{60}{\textbf{0.494}} & \cellperf{56}{0.557} \\
+    Median+IQR     & \cellperf{47}{0.643} & \cellperf{30}{0.508} & \cellperf{35}{0.484} & \cellperf{44}{0.545} \\
+    Stats          & \cellperf{52}{0.650} & \cellperf{30}{0.540} & \cellperf{35}{0.484} & \cellperf{54}{0.558} \\
+    Covariance     & \cellperf{22}{0.587} & \cellperf{15}{0.424} & \cellperf{33}{0.470} & \cellperf{22}{0.494} \\
+    \midrule
+    \multicolumn{5}{l}{\textit{Parametric pools (fit on train set)}} \\
+    PCA            & \cellperf{49}{0.644} & \cellperf{20}{0.479} & \cellperf{35}{0.482} & \cellperf{40}{0.535} \\
+    BoVW           & \cellperf{15}{0.447} & \cellperf{15}{0.230} & \cellperf{15}{0.155} & \cellperf{15}{0.277} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
