@@ -5,7 +5,9 @@ PDF = $(TEX).pdf
 
 build: $(PDF)
 
-$(PDF): $(TEX).tex refs.bib IEEEtran.cls IEEEtran.bst knn_table.tex linear_table.tex figures/nd_rule.pdf
+TABLES = $(wildcard tables/*.tex)
+
+$(PDF): $(TEX).tex refs.bib IEEEtran.cls IEEEtran.bst $(TABLES) figures/nd_rule.pdf
 	pdflatex $(TEX)
 	bibtex $(TEX)
 	pdflatex $(TEX)

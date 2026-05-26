@@ -86,8 +86,8 @@ In total we evaluate 11 training-free and 2 fitted operators.
 \section{Experimental Setup}
 We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic regression with regularization $C$ selected by 3-fold CV on the training split. We standardize before linear probing~\cite{corley2024revisiting}. Both probes are deterministic under our protocol; rerunning the linear probe with three seeds (0, 1, 42) yields identical accuracy ($\sigma{=}0$\,pp). EuroSAT results appear in Table~\ref{tab:eurosat} under random and spatial splits; PASTIS results (F1-macro) appear in Table~\ref{tab:pastis} (OE\,=\,OlmoEarth-Nano, Tess\,=\,Tessera).
 
-\input{eurosat_table.tex}
-\input{pastis_table.tex}
+\input{tables/eurosat_table.tex}
+\input{tables/pastis_table.tex}
 
 \section{Results}
 \label{sec:results}
