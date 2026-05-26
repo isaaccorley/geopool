@@ -13,6 +13,7 @@ embeddings/
 global_0.1_degree_representation/
 global_0.1_degree_tiff_all/
 errors.csv
+errors_*.csv
 run.sh
 data/tessera-splits/
 
