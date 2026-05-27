@@ -9,7 +9,6 @@
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
 \usepackage{placeins}
-\usepackage{dblfloatfix}
 
 \graphicspath{{figures/}}
 
@@ -34,7 +33,7 @@
 \maketitle
 
 \begin{abstract}
-Geospatial foundation models (GFMs) increasingly publish pixel-level embedding products that practitioners reuse without access to the encoder. Downstream patch- and region-level tasks must aggregate these dense embeddings into a single vector, yet pooling is usually treated as a default preprocessing step. We show that the ratio $N/D$ of pixels per region to embedding dimension predicts when higher-order pooling is reliable: fixed chips with $N \gg D$ benefit from distributional statistics, while variable-size parcels with $N \approx D$ expose covariance pooling as an unstable estimator. Across EuroSAT and PASTIS embeddings from AlphaEarth, OlmoEarth-Nano, and Tessera, distributional pooling reduces geographic generalization gaps on high-$N/D$ chips, but PASTIS acts as the failure case where covariance drops by more than 30\,pp and first-order summaries such as \emph{mean+std} and \emph{center-weighted} remain competitive. We give practitioners a one-step decision rule and release \emph{EuroSAT-Embed}, \emph{PASTIS-Embed}, and benchmark code.\footnote{Code: \url{https://github.com/isaaccorley/geopool}; data: \url{https://huggingface.co/datasets/isaaccorley/eurosat-embed} and \url{https://huggingface.co/datasets/isaaccorley/pastis-embed}.}
+Geospatial foundation models (GFMs) increasingly publish pixel-level embedding products that practitioners reuse without access to the encoder. Downstream patch- and region-level tasks must aggregate these dense embeddings into a single vector, yet pooling is usually treated as a default preprocessing step. We show that the ratio $N/D$ of pixels per region to embedding dimension predicts when higher-order pooling is reliable: fixed chips with $N \gg D$ benefit from distributional statistics, while variable-size parcels with $N \approx D$ expose covariance pooling as an unstable estimator. Across EuroSAT and PASTIS embeddings from AlphaEarth, OlmoEarth-Nano, and Tessera, distributional pooling reduces geographic generalization gaps on high-$N/D$ chips, but PASTIS acts as the failure case where covariance drops by more than 30\,pp and first-order summaries such as \emph{mean+std} and \emph{center-weighted} remain competitive. We give practitioners a one-step decision rule and release \emph{EuroSAT-Embed}, \emph{PASTIS-Embed}, and benchmark code.\footnote{Code: \href{https://github.com/isaaccorley/geopool}{GitHub}; data: \href{https://huggingface.co/datasets/isaaccorley/eurosat-embed}{EuroSAT-Embed} and \href{https://huggingface.co/datasets/isaaccorley/pastis-embed}{PASTIS-Embed}.}
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -128,7 +127,7 @@ We evaluate two probes: kNN ($k{=}5$, cosine distance) and multinomial logistic 
   \footnotesize
   \setlength{\tabcolsep}{4pt}
   \caption{Practitioner cheat-sheet: pick a pooling operator from $N$ (pixels per region) and $D$ (embedding dimension). Apply at inference time, no training.}\label{tab:cheatsheet}
-  \begin{tabular}{@{}p{0.30\linewidth}p{0.36\linewidth}p{0.22\linewidth}@{}}
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}p{0.22\linewidth}@{}}
     \toprule
     Regime & Recommended & Fallback \\
     \midrule
