@@ -10,11 +10,14 @@ Downstream probe_pastis_cv.py rotates the test fold to compute CV mean ± std.
 
 import argparse
 import json
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # repo root for scripts.*
 
 from scripts.pool_pastis import (
     PARCEL_POOL_FNS,

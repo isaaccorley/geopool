@@ -175,3 +175,5 @@ dmypy.json
 *.synctex(busy)
 _minted-*/
 
+results/cov/
+results/cov_smoke/
