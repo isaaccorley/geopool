@@ -17,6 +17,14 @@ cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs results/cov
 source .venv/bin/activate
 
+# Per-parcel covariance matrices are tiny (D<=128); single-thread BLAS is
+# faster and avoids catastrophic thread oversubscription when array tasks
+# share a node.
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
 DATASETS=(aef olmoearth tessera)
 DS=${DATASETS[$SLURM_ARRAY_TASK_ID]}
 
